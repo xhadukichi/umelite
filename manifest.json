@@ -1,7 +1,7 @@
 {
   "name": "UMEditor lite",
   "short_name": "UME lite",
-  "start_url": "/ume-lite/",
+  "start_url": "/umelite/",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#ffffff",
