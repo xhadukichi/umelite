@@ -61,9 +61,11 @@
             color: #eee;
         }
 
+        /* コンテナの高さをステータスバー分さらに確保 */
         #container {
             display: flex;
             height: calc(100% - 75px);
+            /* 基本の高さ */
             position: relative;
         }
 
@@ -93,18 +95,25 @@
             pointer-events: none;
         }
 
+        /* Portraitモード時のアウトライン制限 */
+        body.portrait-mode #outline {
+            width: 100% !important;
+            max-height: 50vh;
+            /* 画面の高さの50%を上限にする */
+            border-right: none;
+            border-bottom: 1px solid var(--border);
+        }
+
+
+        /* リサイザーの基本設定（太めにしてスマホでも触りやすく） */
         #resizer {
-            width: 8px;
+            width: 12px;
             background: var(--resizer-bg);
             cursor: col-resize;
             flex-shrink: 0;
             z-index: 10;
-        }
-
-        body.portrait-mode #resizer {
-            width: 100% !important;
-            height: 8px;
-            cursor: row-resize;
+            touch-action: none;
+            /* スマホのスクロール干渉防止 */
         }
 
         #resizer:hover {
@@ -114,6 +123,24 @@
         #resizer.hidden {
             display: none;
         }
+
+        /* 縦持ち（スマホ）時のリサイザーと制限 */
+        body.portrait-mode #resizer {
+            width: 100% !important;
+            height: 15px;
+            cursor: row-resize;
+        }
+
+        body.portrait-mode #outline {
+            width: 100% !important;
+            max-height: 50vh;
+            /* 画面の半分以上に広がらないように制限 */
+            border-right: none;
+            border-bottom: 1px solid var(--border);
+        }
+
+
+
 
         #editorWrapper {
             flex: 1;
@@ -157,45 +184,94 @@
             display: none;
         }
 
+        /* 検索バーの改善 */
+        /* 検索バー：ステータスバーの上にぴったり重ねる */
         #searchBar {
             display: none;
             background: var(--menu-bg);
-            padding: 8px;
+            padding: 8px 10px;
             border-top: 2px solid var(--accent);
-            gap: 6px;
+            gap: 8px;
             align-items: center;
+            position: fixed;
+            bottom: 35px;
+            /* ステータスバーの高さ(35px)分上げる */
+            left: 0;
+            width: 100%;
+            z-index: 1001;
+            box-sizing: border-box;
+        }
+
+        /* 検索を消すボタン（大きく、赤くして分かりやすく） */
+        .close-search-btn {
+            padding: 4px 10px;
+            font-size: 18px;
+            background: #ff5252 !important;
+            color: white !important;
+            border: 1px solid #c62828;
+            border-radius: 4px;
+            cursor: pointer;
+            flex-shrink: 0;
+            /* 潰れないように固定 */
         }
 
         #searchBar input {
             flex: 1;
+            min-width: 0;
             padding: 4px;
             border: 1px solid var(--border);
             background: var(--bg);
             color: var(--text);
         }
 
-        #searchBar button {
-            font-size: 11px;
-            padding: 4px 10px;
-            cursor: pointer;
-            border: 1px solid var(--border);
-            background: #eee;
+        /* 閉じるボタンを大きく、押しやすく */
+        #searchBar button:last-child {
+            margin-left: 5px;
+            padding: 6px 12px;
+            font-weight: bold;
+            background: #ff5252;
+            /* 閉じるボタンを分かりやすく赤系に（任意） */
+            color: white;
         }
+
 
         body.dark-mode #searchBar button {
             background: #444;
             color: #eee;
         }
 
+        /* ステータスバーを常に最前面・最下部に固定する準備 */
         #statusBar {
             height: 35px;
             background: var(--menu-bg);
             display: flex;
             align-items: center;
-            justify-content: space-between;
             padding: 0 10px;
             border-top: 1px solid var(--border);
             font-size: 12px;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            z-index: 1000;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+
+        /* アイコン群：横一列を死守 */
+        .status-btns {
+            display: flex !important;
+            flex-direction: row !important;
+            gap: 4px;
+            align-items: center;
+            margin-right: 10px;
+            flex-shrink: 0;
+        }
+
+        /* アイコンボタン自体のサイズ調整 */
+        .status-btns button {
+            padding: 2px 6px;
+            font-size: 14px;
         }
 
         #markerPosContainer {
@@ -233,7 +309,7 @@
         <input type="text" id="searchInput" placeholder="検索...">
         <button onclick="searchAction(false)">Next</button>
         <button onclick="searchAction(true)">Prev</button>
-        <button onclick="toggleSearch()">×</button>
+        <button class="close-search-btn" onclick="toggleSearch()">☒</button>
     </div>
 
     <div id="statusBar">
@@ -259,6 +335,45 @@
         const resizer = document.getElementById('resizer');
         const searchBar = document.getElementById('searchBar');
         const fileNameDisplay = document.getElementById('fileNameDisplay');
+
+        // スマホのキーボード表示（Visual Viewport）に対応する処理
+        // ビジュアルビューポート（キーボード）対応
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', () => {
+                const vv = window.visualViewport;
+                const offset = window.innerHeight - vv.height;
+
+                const statusBar = document.getElementById('statusBar');
+                const searchBar = document.getElementById('searchBar');
+
+                // バーをキーボードの直上に配置
+                statusBar.style.bottom = offset + "px";
+                searchBar.style.bottom = (offset + 35) + "px";
+
+                // エディタ（コンテナ）の高さを確保
+                const searchHeight = (searchBar.style.display === 'flex') ? searchBar.offsetHeight : 0;
+                document.getElementById('container').style.height = (vv.height - 40 - 35 - searchHeight) + "px";
+
+                updateMarker();
+            });
+        }
+
+        // 検索バーの表示切り替え
+        function toggleSearch() {
+            const isShowing = (searchBar.style.display === 'flex');
+            searchBar.style.display = isShowing ? 'none' : 'flex';
+
+            if (!isShowing) {
+                document.getElementById('searchInput').focus();
+            }
+
+            // レイアウトの再計算を強制
+            if (window.visualViewport) {
+                window.visualViewport.dispatchEvent(new Event('resize'));
+            }
+        }
+
+
 
         let ticking = false;
         let currentFileName = "new_file.txt"; // 現在のファイル名を保持
@@ -443,18 +558,57 @@
             });
         }
 
+
+
+        // ここに追加 ----------------
         let isResizing = false;
-        resizer.addEventListener('mousedown', () => { isResizing = true; document.body.classList.add('resizing'); });
-        document.addEventListener('mousemove', e => {
+
+        // リサイズ実行関数
+        function handleResize(e) {
             if (!isResizing) return;
+
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
             if (document.body.classList.contains('portrait-mode')) {
-                outline.style.height = (e.clientY - 40) + "px";
+                let newHeight = clientY - 40;
+                const maxHeight = window.innerHeight * 0.5; // 画面の50%
+                if (newHeight > maxHeight) newHeight = maxHeight;
+                if (newHeight < 50) newHeight = 50;
+                outline.style.height = newHeight + "px";
             } else {
-                outline.style.width = e.clientX + "px";
+                let newWidth = clientX;
+                if (newWidth < 50) newWidth = 50;
+                outline.style.width = newWidth + "px";
             }
             updateMarker();
-        });
+        }
+
+        // マウスイベント
+        resizer.addEventListener('mousedown', () => { isResizing = true; document.body.classList.add('resizing'); });
+        document.addEventListener('mousemove', handleResize);
         document.addEventListener('mouseup', () => { isResizing = false; document.body.classList.remove('resizing'); });
+
+        // タッチイベント（スマホ用）
+        resizer.addEventListener('touchstart', (e) => {
+            isResizing = true;
+            document.body.classList.add('resizing');
+        }, { passive: false });
+        document.addEventListener('touchmove', handleResize, { passive: false });
+        document.addEventListener('touchend', () => { isResizing = false; document.body.classList.remove('resizing'); });
+
+
+
+        // マウスとタッチの両方に対応する関数
+
+
+
+
+
+
+        // イベントリスナーの追加
+
+
 
         // イベント
         editor.addEventListener('input', () => { updateStatus(); updateMarker(); });
