@@ -2,643 +2,768 @@
 <html lang="ja">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>UME lite v1.0</title>
-    <link rel="icon" href="icon-192.png">
-    <link rel="apple-touch-icon" href="icon-192.png">
-    <link rel="manifest" href="manifest.json">
-    <style>
-        :root {
-            --bg: #ffffff;
-            --text: #333333;
-            --menu-bg: #f0f0f0;
-            --border: #ccc;
-            --accent: #ffca28;
-            --outline-bg: #f8f8f8;
-            --resizer-bg: #ddd;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>UME lite v1.0</title>
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="manifest" href="manifest.json">
+<style>
+:root {
+    --bg: #ffffff;
+    --text: #333333;
+    --menu-bg: #f0f0f0;
+    --border: #ccc;
+    --accent: #ffca28;
+    --outline-bg: #f8f8f8;
+    --resizer-bg: #ddd;
+}
 
-        body.dark-mode {
-            --bg: #1e1e1e;
-            --text: #dcdcdc;
-            --menu-bg: #2d2d2d;
-            --border: #444;
-            --outline-bg: #252526;
-            --resizer-bg: #333;
-        }
+body.dark-mode {
+    --bg: #1e1e1e;
+    --text: #dcdcdc;
+    --menu-bg: #2d2d2d;
+    --border: #444;
+    --outline-bg: #252526;
+    --resizer-bg: #333;
+}
 
-        html,
-        body {
-            margin: 0;
-            padding: 0;
-            height: 100%;
-            overflow: hidden;
-            background: var(--bg);
-            color: var(--text);
-            font-family: monospace;
-        }
+html,
+body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: monospace;
+}
 
-        #menu {
-            height: 40px;
-            background: var(--menu-bg);
-            display: flex;
-            align-items: center;
-            padding: 0 10px;
-            gap: 6px;
-            border-bottom: 1px solid var(--border);
-            z-index: 100;
-        }
+#menu {
+    height: 40px;
+    background: var(--menu-bg);
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    gap: 6px;
+    border-bottom: 1px solid var(--border);
+    z-index: 100;
+}
 
-        #menu button {
-            font-size: 12px;
-            height: 26px;
-            cursor: pointer;
-            border: 1px solid var(--border);
-            background: #eee;
-            border-radius: 3px;
-        }
+#menu button {
+    font-size: 12px;
+    height: 26px;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: #eee;
+    border-radius: 3px;
+}
 
-        body.dark-mode #menu button {
-            background: #444;
-            color: #eee;
-        }
+body.dark-mode #menu button {
+    background: #444;
+    color: #eee;
+}
 
-        /* コンテナの高さをステータスバー分さらに確保 */
-        #container {
-            display: flex;
-            height: calc(100% - 75px);
-            /* 基本の高さ */
-            position: relative;
-        }
+/* コンテナの高さをステータスバー分さらに確保 */
+#container {
+    display: flex;
+    height: calc(100% - 75px);
+    /* 基本の高さ */
+    position: relative;
+}
 
-        body.portrait-mode #container {
-            flex-direction: column;
-        }
+body.portrait-mode #container {
+    flex-direction: column;
+}
 
-        #outline {
-            width: 250px;
-            background: var(--outline-bg);
-            overflow-y: auto;
-            flex-shrink: 0;
-            border-right: 1px solid var(--border);
-        }
+#outline {
+    width: 250px;
+    background: var(--outline-bg);
+    overflow-y: auto;
+    flex-shrink: 0;
+    border-right: 1px solid var(--border);
+}
 
-        body.portrait-mode #outline {
-            width: 100% !important;
-            border-right: none;
-            border-bottom: 1px solid var(--border);
-        }
+body.portrait-mode #outline {
+    width: 100% !important;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+}
 
-        #outline.hidden {
-            display: none;
-        }
+#outline.hidden {
+    display: none;
+}
 
-        body.resizing #outline {
-            pointer-events: none;
-        }
+body.resizing #outline {
+    pointer-events: none;
+}
 
-        /* Portraitモード時のアウトライン制限 */
-        body.portrait-mode #outline {
-            width: 100% !important;
-            max-height: 50vh;
-            /* 画面の高さの50%を上限にする */
-            border-right: none;
-            border-bottom: 1px solid var(--border);
-        }
-
-
-        /* リサイザーの基本設定（太めにしてスマホでも触りやすく） */
-        #resizer {
-            width: 12px;
-            background: var(--resizer-bg);
-            cursor: col-resize;
-            flex-shrink: 0;
-            z-index: 10;
-            touch-action: none;
-            /* スマホのスクロール干渉防止 */
-        }
-
-        #resizer:hover {
-            background: var(--accent);
-        }
-
-        #resizer.hidden {
-            display: none;
-        }
-
-        /* 縦持ち（スマホ）時のリサイザーと制限 */
-        body.portrait-mode #resizer {
-            width: 100% !important;
-            height: 15px;
-            cursor: row-resize;
-        }
-
-        body.portrait-mode #outline {
-            width: 100% !important;
-            max-height: 50vh;
-            /* 画面の半分以上に広がらないように制限 */
-            border-right: none;
-            border-bottom: 1px solid var(--border);
-        }
+/* Portraitモード時のアウトライン制限 */
+body.portrait-mode #outline {
+    width: 100% !important;
+    max-height: 50vh;
+    /* 画面の高さの50%を上限にする */
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+}
 
 
+/* リサイザーの基本設定（太めにしてスマホでも触りやすく） */
+#resizer {
+    width: 12px;
+    background: var(--resizer-bg);
+    cursor: col-resize;
+    flex-shrink: 0;
+    z-index: 10;
+    touch-action: none;
+    /* スマホのスクロール干渉防止 */
+}
+
+#resizer:hover {
+    background: var(--accent);
+}
+
+#resizer.hidden {
+    display: none;
+}
+
+/* 縦持ち（スマホ）時のリサイザーと制限 */
+body.portrait-mode #resizer {
+    width: 100% !important;
+    height: 15px;
+    cursor: row-resize;
+}
+
+body.portrait-mode #outline {
+    width: 100% !important;
+    max-height: 50vh;
+    /* 画面の半分以上に広がらないように制限 */
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+}
 
 
-        #editorWrapper {
-            flex: 1;
-            position: relative;
-            overflow: hidden;
-            background: var(--bg);
-        }
-
-        .editor-font {
-            font-size: 20px;
-            line-height: 1.6;
-            font-family: 'Consolas', 'Monaco', monospace;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            padding: 20px;
-            box-sizing: border-box;
-        }
-
-        #editor {
-            width: 100%;
-            height: 100%;
-            background: transparent;
-            color: var(--text);
-            border: none;
-            outline: none;
-            resize: none;
-            overflow-y: scroll;
-            position: relative;
-            z-index: 5;
-            scroll-behavior: auto;
-        }
-
-        #currentLineMarker {
-            position: absolute;
-            left: 0;
-            width: 100%;
-            background: rgba(255, 202, 40, 0.15);
-            border-bottom: 2px solid var(--accent);
-            pointer-events: none;
-            z-index: 1;
-            display: none;
-        }
-
-        /* 検索バーの改善 */
-        /* 検索バー：ステータスバーの上にぴったり重ねる */
-        #searchBar {
-            display: none;
-            background: var(--menu-bg);
-            padding: 8px 10px;
-            border-top: 2px solid var(--accent);
-            gap: 8px;
-            align-items: center;
-            position: fixed;
-            bottom: 35px;
-            /* ステータスバーの高さ(35px)分上げる */
-            left: 0;
-            width: 100%;
-            z-index: 1001;
-            box-sizing: border-box;
-        }
-
-        /* 検索を消すボタン（大きく、赤くして分かりやすく） */
-        .close-search-btn {
-            padding: 4px 10px;
-            font-size: 18px;
-            background: #ff5252 !important;
-            color: white !important;
-            border: 1px solid #c62828;
-            border-radius: 4px;
-            cursor: pointer;
-            flex-shrink: 0;
-            /* 潰れないように固定 */
-        }
-
-        #searchBar input {
-            flex: 1;
-            min-width: 0;
-            padding: 4px;
-            border: 1px solid var(--border);
-            background: var(--bg);
-            color: var(--text);
-        }
-
-        /* 閉じるボタンを大きく、押しやすく */
-        #searchBar button:last-child {
-            margin-left: 5px;
-            padding: 6px 12px;
-            font-weight: bold;
-            background: #ff5252;
-            /* 閉じるボタンを分かりやすく赤系に（任意） */
-            color: white;
-        }
 
 
-        body.dark-mode #searchBar button {
-            background: #444;
-            color: #eee;
-        }
+/* ===== ヘルプモーダル（既存部分の修正と追加） ===== */
+/* ===== ヘルプモーダルの一元化 ===== */
+#helpModal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+}
 
-        /* ステータスバーを常に最前面・最下部に固定する準備 */
-        #statusBar {
-            height: 35px;
-            background: var(--menu-bg);
-            display: flex;
-            align-items: center;
-            padding: 0 10px;
-            border-top: 1px solid var(--border);
-            font-size: 12px;
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            z-index: 1000;
-            box-sizing: border-box;
-            overflow: hidden;
-        }
+#helpModal.show {
+    display: flex;
+}
 
-        /* アイコン群：横一列を死守 */
-        .status-btns {
-            display: flex !important;
-            flex-direction: row !important;
-            gap: 4px;
-            align-items: center;
-            margin-right: 10px;
-            flex-shrink: 0;
-        }
+#helpContent {
+    /* モード共通のサイズ設定 */
+    background: var(--bg);
+    color: var(--text);
+    width: 90%;          /* スマホ向け */
+    max-width: 600px;    /* PC向け */
+    max-height: 80vh;
+    padding: 20px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
 
-        /* アイコンボタン自体のサイズ調整 */
-        .status-btns button {
-            padding: 2px 6px;
-            font-size: 14px;
-        }
+/* モーダル内のスクロールエリア */
+.help-body {
+    overflow-y: auto;
+    flex: 1;
+    margin-bottom: 15px;
+    font-size: 14px;
+    line-height: 1.6;
+}
 
-        #markerPosContainer {
-            position: absolute;
-            top: 0;
-            left: 0;
-            visibility: hidden;
-            pointer-events: none;
-        }
-    </style>
+/* ダークモード専用の微調整（サイズではなく色の調整） */
+body.dark-mode #helpContent {
+    border-color: var(--accent); /* ダークモード時は枠線を少し強調 */
+}
+
+/* ボタンのスタイル */
+#helpContent button {
+    align-self: flex-end;
+    padding: 8px 20px;
+    cursor: pointer;
+    background: var(--menu-bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
+
+body.dark-mode #helpContent button {
+    background: #444;
+    color: #eee;
+    border: 1px solid var(--border);
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 10px;
+}
+
+
+
+#editorWrapper {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background: var(--bg);
+}
+
+.editor-font {
+    font-size: 20px;
+    line-height: 1.6;
+    font-family: 'Consolas', 'Monaco', monospace;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+#editor {
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    color: var(--text);
+    border: none;
+    outline: none;
+    resize: none;
+    overflow-y: scroll;
+    position: relative;
+    z-index: 5;
+    scroll-behavior: auto;
+}
+
+#currentLineMarker {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    background: rgba(255, 202, 40, 0.15);
+    border-bottom: 2px solid var(--accent);
+    pointer-events: none;
+    z-index: 1;
+    display: none;
+}
+
+/* 検索バーの改善 */
+/* 検索バー：ステータスバーの上にぴったり重ねる */
+#searchBar {
+    display: none;
+    background: var(--menu-bg);
+    padding: 8px 10px;
+    border-top: 2px solid var(--accent);
+    gap: 8px;
+    align-items: center;
+    position: fixed;
+    bottom: 35px;
+    /* ステータスバーの高さ(35px)分上げる */
+    left: 0;
+    width: 100%;
+    z-index: 1001;
+    box-sizing: border-box;
+}
+
+/* 検索を消すボタン（大きく、赤くして分かりやすく） */
+.close-search-btn {
+    padding: 4px 10px;
+    font-size: 18px;
+    background: #ff5252 !important;
+    color: white !important;
+    border: 1px solid #c62828;
+    border-radius: 4px;
+    cursor: pointer;
+    flex-shrink: 0;
+    /* 潰れないように固定 */
+}
+
+#searchBar input {
+    flex: 1;
+    min-width: 0;
+    padding: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+}
+
+/* 閉じるボタンを大きく、押しやすく */
+#searchBar button:last-child {
+    margin-left: 5px;
+    padding: 6px 12px;
+    font-weight: bold;
+    background: #ff5252;
+    /* 閉じるボタンを分かりやすく赤系に（任意） */
+    color: white;
+}
+
+
+body.dark-mode #searchBar button {
+    background: #444;
+    color: #eee;
+}
+
+/* ステータスバーを常に最前面・最下部に固定する準備 */
+#statusBar {
+    height: 35px;
+    background: var(--menu-bg);
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    z-index: 1000;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+/* アイコン群：横一列を死守 */
+.status-btns {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 4px;
+    align-items: center;
+    margin-right: 10px;
+    flex-shrink: 0;
+}
+
+/* アイコンボタン自体のサイズ調整 */
+.status-btns button {
+    padding: 2px 6px;
+    font-size: 14px;
+}
+
+#markerPosContainer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+</style>
 </head>
 
 <body class="dark-mode">
 
-    <div id="menu">
-        <button onclick="newFile()">New</button>
-        <button onclick="openFile()">Open</button>
-        <button onclick="saveFile()">Save</button>
-        <span style="opacity:0.3">|</span>
-        <button onclick="adjustFont(2)">F+</button>
-        <button onclick="adjustFont(-2)">F-</button>
-        <button onclick="toggleDarkMode()">🌙</button>
-    </div>
+<div id="menu">
+<button onclick="newFile()">New</button>
+<button onclick="openFile()">Open</button>
+<button onclick="saveFile()">Save</button>
+<span style="opacity:0.3">|</span>
+<button onclick="adjustFont(2)">F+</button>
+<button onclick="adjustFont(-2)">F-</button>
+<button onclick="toggleDarkMode()">🌙</button>
+<span style="opacity:0.3">|</span>
+<button onclick="toggleHelp()">？</button>
+</div>
 
-    <div id="container">
-        <div id="outline"></div>
-        <div id="resizer"></div>
-        <div id="editorWrapper">
-            <div id="currentLineMarker"></div>
-            <textarea id="editor" class="editor-font" spellcheck="false"></textarea>
-        </div>
-    </div>
+<div id="container">
+<div id="outline"></div>
+<div id="resizer"></div>
+<div id="editorWrapper">
+    <div id="currentLineMarker"></div>
+    <textarea id="editor" class="editor-font" spellcheck="false"></textarea>
+</div>
+</div>
 
-    <div id="searchBar">
-        <input type="text" id="searchInput" placeholder="検索...">
-        <button onclick="searchAction(false)">Next</button>
-        <button onclick="searchAction(true)">Prev</button>
-        <button class="close-search-btn" onclick="toggleSearch()">☒</button>
-    </div>
+<div id="searchBar">
+    <input type="text" id="searchInput" placeholder="検索...">
+    <button onclick="searchAction(false)">Next</button>
+    <button onclick="searchAction(true)">Prev</button>
+    <button class="close-search-btn" onclick="toggleSearch()">☒</button>
+</div>
 
-    <div id="statusBar">
-        <div class="status-btns">
-            <button onclick="toggleOutline()">📖</button>
-            <button onclick="switchDirection()">↔</button>
-            <button onclick="updateOutline()">🔄</button>
-            <button onclick="toggleSearch()">🔍</button>
-        </div>
-        <div style="flex: 1; margin: 0 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-            File: <span id="fileNameDisplay">new_file.txt</span>
-        </div>
-        <div>LN: <span id="ln">1</span> | COL: <span id="col">0</span> | <span id="chars">0</span> chars</div>
-    </div>
+<div id="statusBar">
+<div class="status-btns">
+    <button onclick="toggleOutline()">📖</button>
+    <button onclick="switchDirection()">↔</button>
+    <button onclick="updateOutline()">🔄</button>
+    <button onclick="toggleSearch()">🔍</button>
+</div>
+<div style="flex: 1; margin: 0 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+    File: <span id="fileNameDisplay">new_file.txt</span>
+</div>
+<div>LN: <span id="ln">1</span> | COL: <span id="col">0</span> | <span id="chars">0</span> chars</div>
+</div>
 
-    <div id="markerPosContainer" class="editor-font"></div>
+<div id="markerPosContainer" class="editor-font"></div>
 
-    <script>
-        const editor = document.getElementById('editor');
-        const marker = document.getElementById('currentLineMarker');
-        const markerPosContainer = document.getElementById('markerPosContainer');
-        const outline = document.getElementById('outline');
-        const resizer = document.getElementById('resizer');
+<script>
+const editor = document.getElementById('editor');
+const marker = document.getElementById('currentLineMarker');
+const markerPosContainer = document.getElementById('markerPosContainer');
+const outline = document.getElementById('outline');
+const resizer = document.getElementById('resizer');
+const searchBar = document.getElementById('searchBar');
+const fileNameDisplay = document.getElementById('fileNameDisplay');
+
+// スマホのキーボード表示（Visual Viewport）に対応する処理
+// ビジュアルビューポート（キーボード）対応
+if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', () => {
+        const vv = window.visualViewport;
+        const offset = window.innerHeight - vv.height;
+
+        const statusBar = document.getElementById('statusBar');
         const searchBar = document.getElementById('searchBar');
-        const fileNameDisplay = document.getElementById('fileNameDisplay');
 
-        // スマホのキーボード表示（Visual Viewport）に対応する処理
-        // ビジュアルビューポート（キーボード）対応
-        if (window.visualViewport) {
-            window.visualViewport.addEventListener('resize', () => {
-                const vv = window.visualViewport;
-                const offset = window.innerHeight - vv.height;
+        // バーをキーボードの直上に配置
+        statusBar.style.bottom = offset + "px";
+        searchBar.style.bottom = (offset + 35) + "px";
 
-                const statusBar = document.getElementById('statusBar');
-                const searchBar = document.getElementById('searchBar');
+        // エディタ（コンテナ）の高さを確保
+        const searchHeight = (searchBar.style.display === 'flex') ? searchBar.offsetHeight : 0;
+        document.getElementById('container').style.height = (vv.height - 40 - 35 - searchHeight) + "px";
 
-                // バーをキーボードの直上に配置
-                statusBar.style.bottom = offset + "px";
-                searchBar.style.bottom = (offset + 35) + "px";
+        updateMarker();
+    });
+}
 
-                // エディタ（コンテナ）の高さを確保
-                const searchHeight = (searchBar.style.display === 'flex') ? searchBar.offsetHeight : 0;
-                document.getElementById('container').style.height = (vv.height - 40 - 35 - searchHeight) + "px";
+// 検索バーの表示切り替え
+function toggleSearch() {
+    const isShowing = (searchBar.style.display === 'flex');
+    searchBar.style.display = isShowing ? 'none' : 'flex';
 
-                updateMarker();
-            });
-        }
+    if (!isShowing) {
+        document.getElementById('searchInput').focus();
+    }
 
-        // 検索バーの表示切り替え
-        function toggleSearch() {
-            const isShowing = (searchBar.style.display === 'flex');
-            searchBar.style.display = isShowing ? 'none' : 'flex';
-
-            if (!isShowing) {
-                document.getElementById('searchInput').focus();
-            }
-
-            // レイアウトの再計算を強制
-            if (window.visualViewport) {
-                window.visualViewport.dispatchEvent(new Event('resize'));
-            }
-        }
+    // レイアウトの再計算を強制
+    if (window.visualViewport) {
+        window.visualViewport.dispatchEvent(new Event('resize'));
+    }
+}
 
 
 
-        let ticking = false;
-        let currentFileName = "new_file.txt"; // 現在のファイル名を保持
+let ticking = false;
+let currentFileName = "new_file.txt"; // 現在のファイル名を保持
 
-        // マーカー更新
-        function updateMarker(scrollIntoView = false) {
-            if (!ticking) {
-                window.requestAnimationFrame(() => {
-                    const text = editor.value;
-                    const pos = editor.selectionStart;
-                    markerPosContainer.style.width = editor.clientWidth + "px";
-
-                    const preText = text.substring(0, pos);
-                    markerPosContainer.textContent = '';
-                    const textNode = document.createTextNode(preText);
-                    const span = document.createElement('span');
-                    span.textContent = '|';
-
-                    markerPosContainer.appendChild(textNode);
-                    markerPosContainer.appendChild(span);
-
-                    const caretY = span.offsetTop;
-                    const lh = parseFloat(getComputedStyle(editor).lineHeight);
-
-                    if (scrollIntoView) {
-                        const viewTop = editor.scrollTop;
-                        const viewHeight = editor.clientHeight;
-                        const padding = 60;
-                        if (caretY < viewTop + padding || caretY > viewTop + viewHeight - padding) {
-                            editor.scrollTop = caretY - (viewHeight / 2);
-                        }
-                    }
-
-                    const finalTop = caretY - editor.scrollTop - 10;
-                    marker.style.height = lh + "px";
-                    marker.style.top = finalTop + "px";
-                    marker.style.display = 'block';
-
-                    ticking = false;
-                });
-                ticking = true;
-            }
-        }
-
-        // 検索
-        function searchAction(reverse) {
-            const query = document.getElementById('searchInput').value;
-            if (!query) return;
+// マーカー更新
+function updateMarker(scrollIntoView = false) {
+    if (!ticking) {
+        window.requestAnimationFrame(() => {
             const text = editor.value;
-            let idx;
-            if (reverse) {
-                idx = text.lastIndexOf(query, editor.selectionStart - 1);
-                if (idx === -1) idx = text.lastIndexOf(query);
-            } else {
-                idx = text.indexOf(query, editor.selectionEnd);
-                if (idx === -1) idx = text.indexOf(query);
-            }
-            if (idx !== -1) {
-                editor.setSelectionRange(idx, idx + query.length);
-                updateMarker(true);
-                editor.focus();
-            }
-        }
-
-        // ステータス更新（COL 0始まり）
-        function updateStatus() {
             const pos = editor.selectionStart;
-            const textBefore = editor.value.substring(0, pos);
-            const lines = textBefore.split('\n');
-            document.getElementById('ln').innerText = lines.length;
-            document.getElementById('col').innerText = lines[lines.length - 1].length; // 修正済
-            document.getElementById('chars').innerText = editor.value.length;
-        }
+            markerPosContainer.style.width = editor.clientWidth + "px";
 
-        // ファイル名表示更新
-        function updateFileName(name) {
-            currentFileName = name;
-            fileNameDisplay.innerText = name;
-        }
+            const preText = text.substring(0, pos);
+            markerPosContainer.textContent = '';
+            const textNode = document.createTextNode(preText);
+            const span = document.createElement('span');
+            span.textContent = '|';
 
-        // 基本機能
-        function newFile() {
-            if (confirm("新規作成しますか？")) {
-                editor.value = "";
-                outline.innerHTML = "";
-                updateFileName("new_file.txt");
-                updateStatus();
-                updateMarker();
-            }
-        }
+            markerPosContainer.appendChild(textNode);
+            markerPosContainer.appendChild(span);
 
-        async function saveFile() {
-            // ブラウザが最新のファイル保存APIに対応しているかチェック
-            if ('showSaveFilePicker' in window) {
-                try {
-                    const options = {
-                        suggestedName: currentFileName,
-                        types: [{
-                            description: 'Text Files',
-                            accept: { 'text/plain': ['.txt', '.md'] },
-                        }],
-                    };
-                    // 保存先を選択するダイアログを表示
-                    const handle = await window.showSaveFilePicker(options);
-                    const writable = await handle.createWritable();
-                    await writable.write(editor.value);
-                    await writable.close();
+            const caretY = span.offsetTop;
+            const lh = parseFloat(getComputedStyle(editor).lineHeight);
 
-                    // 保存したファイル名をステータスバーに反映
-                    updateFileName(handle.name);
-                } catch (err) {
-                    console.log('保存がキャンセルされました');
+            if (scrollIntoView) {
+                const viewTop = editor.scrollTop;
+                const viewHeight = editor.clientHeight;
+                const padding = 60;
+                if (caretY < viewTop + padding || caretY > viewTop + viewHeight - padding) {
+                    editor.scrollTop = caretY - (viewHeight / 2);
                 }
-            } else {
-                // API非対応ブラウザ（古いブラウザや一部のモバイル）用のフォールバック
-                const name = prompt("保存するファイル名を入力してください", currentFileName);
-                if (name === null) return;
-                const finalName = name.trim() || "note.txt";
-                const blob = new Blob([editor.value], { type: "text/plain" });
-                const a = document.createElement("a");
-                a.href = URL.createObjectURL(blob);
-                a.download = finalName;
-                a.click();
-                updateFileName(finalName);
             }
-        }
 
-        function openFile() {
-            const input = document.createElement("input");
-            input.type = "file";
-            input.onchange = e => {
-                const file = e.target.files[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = () => {
-                    editor.value = reader.result;
-                    updateFileName(file.name); // ファイル名を反映
-                    updateStatus();
-                    updateOutline();
-                    updateMarker();
-                };
-                reader.readAsText(file);
-            };
-            input.click();
-        }
+            const finalTop = caretY - editor.scrollTop - 10;
+            marker.style.height = lh + "px";
+            marker.style.top = finalTop + "px";
+            marker.style.display = 'block';
 
-        function toggleOutline() { outline.classList.toggle('hidden'); resizer.classList.toggle('hidden'); setTimeout(() => updateMarker(), 50); }
-        function toggleSearch() { searchBar.style.display = (searchBar.style.display === 'flex') ? 'none' : 'flex'; if (searchBar.style.display === 'flex') document.getElementById('searchInput').focus(); }
-
-        function switchDirection() {
-            document.body.classList.toggle('portrait-mode');
-            outline.style.width = "";
-            outline.style.height = ""; // 高さをリセット（バグ修正）
-            updateMarker();
-        }
-
-        function adjustFont(step) { const style = getComputedStyle(editor); const newSize = parseFloat(style.fontSize) + step; editor.style.fontSize = markerPosContainer.style.fontSize = newSize + "px"; setTimeout(() => updateMarker(), 50); }
-        function toggleDarkMode() { document.body.classList.toggle('dark-mode'); }
-
-        // アウトライン更新（階層・字下げ・▼アイコン対応）
-        function updateOutline() {
-            outline.innerHTML = '';
-            const lines = editor.value.split('\n');
-            lines.forEach((line, i) => {
-                const trimmed = line.trim();
-                if (trimmed.startsWith('#')) {
-                    const match = trimmed.match(/^(#+)/);
-                    const level = match ? match[1].length : 1;
-                    const item = document.createElement('div');
-                    const indent = 10 + (level - 1) * 20;
-                    item.style.cssText = `padding:8px 10px 8px ${indent}px; cursor:pointer; border-bottom:1px solid var(--border); font-size:13px; display:flex; align-items:center; gap:5px;`;
-                    const titleText = trimmed.replace(/^#+\s*/, '');
-                    item.innerHTML = `<span style="opacity: 0.5; font-size: 10px;">▼</span> ${titleText}`;
-                    item.onclick = () => {
-                        const charPos = lines.slice(0, i).join('\n').length + (i > 0 ? 1 : 0);
-                        editor.setSelectionRange(charPos, charPos);
-                        editor.focus();
-                        updateMarker(true);
-                    };
-                    outline.appendChild(item);
-                }
-            });
-        }
-
-
-
-        // ここに追加 ----------------
-        let isResizing = false;
-
-        // リサイズ実行関数
-        function handleResize(e) {
-            if (!isResizing) return;
-
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-
-            if (document.body.classList.contains('portrait-mode')) {
-                let newHeight = clientY - 40;
-                const maxHeight = window.innerHeight * 0.5; // 画面の50%
-                if (newHeight > maxHeight) newHeight = maxHeight;
-                if (newHeight < 50) newHeight = 50;
-                outline.style.height = newHeight + "px";
-            } else {
-                let newWidth = clientX;
-                if (newWidth < 50) newWidth = 50;
-                outline.style.width = newWidth + "px";
-            }
-            updateMarker();
-        }
-
-        // マウスイベント
-        resizer.addEventListener('mousedown', () => { isResizing = true; document.body.classList.add('resizing'); });
-        document.addEventListener('mousemove', handleResize);
-        document.addEventListener('mouseup', () => { isResizing = false; document.body.classList.remove('resizing'); });
-
-        // タッチイベント（スマホ用）
-        resizer.addEventListener('touchstart', (e) => {
-            isResizing = true;
-            document.body.classList.add('resizing');
-        }, { passive: false });
-        document.addEventListener('touchmove', handleResize, { passive: false });
-        document.addEventListener('touchend', () => { isResizing = false; document.body.classList.remove('resizing'); });
-
-
-
-        // マウスとタッチの両方に対応する関数
-
-
-
-
-
-
-        // イベントリスナーの追加
-
-
-
-        // イベント
-        editor.addEventListener('input', () => { updateStatus(); updateMarker(); });
-        editor.addEventListener('click', () => { updateStatus(); updateMarker(); });
-        editor.addEventListener('keyup', (e) => {
-            updateStatus(); updateMarker();
-            if (e.key === 'Enter') updateOutline();
+            ticking = false;
         });
+        ticking = true;
+    }
+}
 
-        editor.addEventListener('scroll', () => updateMarker(false), { passive: true });
-        window.addEventListener('resize', () => updateMarker(false));
-        window.addEventListener('keydown', e => {
-            // Ctrl + S (または Cmd + S) で保存
-            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-                e.preventDefault();
-                saveFile();
-            }
-            // Ctrl + O (または Cmd + O) でファイルを開く
-            if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
-                e.preventDefault();
-                openFile();
-            }
-        });
+// 検索
+function searchAction(reverse) {
+    const query = document.getElementById('searchInput').value;
+    if (!query) return;
+    const text = editor.value;
+    let idx;
+    if (reverse) {
+        idx = text.lastIndexOf(query, editor.selectionStart - 1);
+        if (idx === -1) idx = text.lastIndexOf(query);
+    } else {
+        idx = text.indexOf(query, editor.selectionEnd);
+        if (idx === -1) idx = text.indexOf(query);
+    }
+    if (idx !== -1) {
+        editor.setSelectionRange(idx, idx + query.length);
+        updateMarker(true);
+        editor.focus();
+    }
+}
 
+// ステータス更新（COL 0始まり）
+function updateStatus() {
+    const pos = editor.selectionStart;
+    const textBefore = editor.value.substring(0, pos);
+    const lines = textBefore.split('\n');
+    document.getElementById('ln').innerText = lines.length;
+    document.getElementById('col').innerText = lines[lines.length - 1].length; // 修正済
+    document.getElementById('chars').innerText = editor.value.length;
+}
+
+// ファイル名表示更新
+function updateFileName(name) {
+    currentFileName = name;
+    fileNameDisplay.innerText = name;
+}
+
+// 基本機能
+function newFile() {
+    if (confirm("新規作成しますか？")) {
+        editor.value = "";
+        outline.innerHTML = "";
+        updateFileName("new_file.txt");
         updateStatus();
-        updateOutline();
-    </script>
+        updateMarker();
+    }
+}
+
+async function saveFile() {
+    // ブラウザが最新のファイル保存APIに対応しているかチェック
+    if ('showSaveFilePicker' in window) {
+        try {
+            const options = {
+                suggestedName: currentFileName,
+                types: [{
+                    description: 'Text Files',
+                    accept: { 'text/plain': ['.txt', '.md'] },
+                }],
+            };
+            // 保存先を選択するダイアログを表示
+            const handle = await window.showSaveFilePicker(options);
+            const writable = await handle.createWritable();
+            await writable.write(editor.value);
+            await writable.close();
+
+            // 保存したファイル名をステータスバーに反映
+            updateFileName(handle.name);
+        } catch (err) {
+            console.log('保存がキャンセルされました');
+        }
+    } else {
+        // API非対応ブラウザ（古いブラウザや一部のモバイル）用のフォールバック
+        const name = prompt("保存するファイル名を入力してください", currentFileName);
+        if (name === null) return;
+        const finalName = name.trim() || "note.txt";
+        const blob = new Blob([editor.value], { type: "text/plain" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = finalName;
+        a.click();
+        updateFileName(finalName);
+    }
+}
+
+function openFile() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.onchange = e => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            editor.value = reader.result;
+            updateFileName(file.name); // ファイル名を反映
+            updateStatus();
+            updateOutline();
+            updateMarker();
+        };
+        reader.readAsText(file);
+    };
+    input.click();
+}
+
+function toggleOutline() { outline.classList.toggle('hidden'); resizer.classList.toggle('hidden'); setTimeout(() => updateMarker(), 50); }
+function toggleSearch() { searchBar.style.display = (searchBar.style.display === 'flex') ? 'none' : 'flex'; if (searchBar.style.display === 'flex') document.getElementById('searchInput').focus(); }
+
+function switchDirection() {
+    document.body.classList.toggle('portrait-mode');
+    outline.style.width = "";
+    outline.style.height = ""; // 高さをリセット（バグ修正）
+    updateMarker();
+}
+
+function adjustFont(step) { const style = getComputedStyle(editor); const newSize = parseFloat(style.fontSize) + step; editor.style.fontSize = markerPosContainer.style.fontSize = newSize + "px"; setTimeout(() => updateMarker(), 50); }
+function toggleDarkMode() { document.body.classList.toggle('dark-mode'); }
+
+// アウトライン更新（階層・字下げ・▼アイコン対応）
+function updateOutline() {
+    outline.innerHTML = '';
+    const lines = editor.value.split('\n');
+    lines.forEach((line, i) => {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('#')) {
+            const match = trimmed.match(/^(#+)/);
+            const level = match ? match[1].length : 1;
+            const item = document.createElement('div');
+            const indent = 10 + (level - 1) * 20;
+            item.style.cssText = `padding:8px 10px 8px ${indent}px; cursor:pointer; border-bottom:1px solid var(--border); font-size:13px; display:flex; align-items:center; gap:5px;`;
+            const titleText = trimmed.replace(/^#+\s*/, '');
+            item.innerHTML = `<span style="opacity: 0.5; font-size: 10px;">▼</span> ${titleText}`;
+            item.onclick = () => {
+                const charPos = lines.slice(0, i).join('\n').length + (i > 0 ? 1 : 0);
+                editor.setSelectionRange(charPos, charPos);
+                editor.focus();
+                updateMarker(true);
+            };
+            outline.appendChild(item);
+        }
+    });
+}
+
+
+
+// ここに追加 ----------------
+let isResizing = false;
+
+// リサイズ実行関数
+function handleResize(e) {
+    if (!isResizing) return;
+
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+    if (document.body.classList.contains('portrait-mode')) {
+        let newHeight = clientY - 40;
+        const maxHeight = window.innerHeight * 0.5; // 画面の50%
+        if (newHeight > maxHeight) newHeight = maxHeight;
+        if (newHeight < 50) newHeight = 50;
+        outline.style.height = newHeight + "px";
+    } else {
+        let newWidth = clientX;
+        if (newWidth < 50) newWidth = 50;
+        outline.style.width = newWidth + "px";
+    }
+    updateMarker();
+}
+
+// マウスイベント
+resizer.addEventListener('mousedown', () => { isResizing = true; document.body.classList.add('resizing'); });
+document.addEventListener('mousemove', handleResize);
+document.addEventListener('mouseup', () => { isResizing = false; document.body.classList.remove('resizing'); });
+
+// タッチイベント（スマホ用）
+resizer.addEventListener('touchstart', (e) => {
+    isResizing = true;
+    document.body.classList.add('resizing');
+}, { passive: false });
+document.addEventListener('touchmove', handleResize, { passive: false });
+document.addEventListener('touchend', () => { isResizing = false; document.body.classList.remove('resizing'); });
+
+
+
+// ヘルプモーダル
+
+function toggleHelp(){
+    document.getElementById("helpModal")
+        .classList.toggle("show");
+}
+
+
+
+
+
+
+
+// イベント
+editor.addEventListener('input', () => { updateStatus(); updateMarker(); });
+editor.addEventListener('click', () => { updateStatus(); updateMarker(); });
+editor.addEventListener('keyup', (e) => {
+    updateStatus(); updateMarker();
+    if (e.key === 'Enter') updateOutline();
+});
+
+editor.addEventListener('scroll', () => updateMarker(false), { passive: true });
+window.addEventListener('resize', () => updateMarker(false));
+window.addEventListener('keydown', e => {
+    // Ctrl + S (または Cmd + S) で保存
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        saveFile();
+    }
+    // Ctrl + O (または Cmd + O) でファイルを開く
+    if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
+        e.preventDefault();
+        openFile();
+    }
+});
+
+updateStatus();
+updateOutline();
+</script>
+
+<div id="helpModal">
+    <div id="helpContent">
+        <h2 style="margin-top:0; border-bottom:1px solid var(--border); padding-bottom:10px;">
+            UME lite - Help
+        </h2>
+        <div class="help-body">
+		<br>
+		●はじめに<br>
+		このエディタはhtmlで作成されているため、<br>
+		最近のブラウザであれば大体動作します。<br>
+		またPCだけでなく、モバイル機器でも動作します。<br>
+		　<br>
+		　<br>
+		Chrome系ブラウザなどの場合、<br>
+		「デスクトップ（ホーム画面）にアイコンを追加」<br>
+		などからインストールして擬似的にアプリ化することができます。<br>
+		　<br>
+		　<br>
+		●アウトラインについて<br>
+		Markdownの見出しレベルに準じたアウトラインです。<br>
+		行頭に「# 」のあるものを見出しとして扱います。<br>
+		「## 」「### 」など「#」の数で階層が深くなります。<br>
+		※「#」と「見出し文」の間にはスペースが必要です。<br>
+		　<br>
+		アウトラインの見出しリストをクリックすると、<br>
+		該当する本文にジャンプします。<br>
+		　<br>
+		　<br>
+		●特別なメニューアイコン<br>
+		上部「🌙」ボタン　：　ダークモードへの切り替え<br>
+		下部「📖」ボタン　：　アウトラインの表示／非表示<br>
+		下部「↔」ボタン　：　アウトラインの「左」↔「上」切り替え<br>
+		下部「🔄」ボタン　：　アウトラインの手動反映<br>
+		下部「🔍」ボタン　：　検索ウィンドウの表示<br>
+		　<br>
+		　<br>
+		●特殊な操作<br>
+		アウトラインエリアとテキストエリアの間の仕切りを<br>
+		ドラッグして動かすことで比率を変えることができます。<br>
+		　<br>
+		　<br>
+		●モバイル版独特の挙動について<br>
+		モバイル版のブラウザは保存先がダウンロードフォルダに<br>
+		固定されており、また上書きができません。<br>
+		これはモバイル版ブラウザの仕様です。<br>
+		　<br>
+   </div>
+    <button onclick="toggleHelp()">閉じる</button>
+  </div>
+</div>
+
+
 </body>
 
 </html>
