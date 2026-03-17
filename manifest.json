@@ -1,6 +1,6 @@
 {
   "name": "UME lite",
-  "short_name": "umelite",
+  "short_name": "UME lite",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#ffffff",
