@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>UME lite v1.1</title>
+    <title>UME lite v1.2</title>
     <link rel="icon" href="icon-192.png">
     <link rel="apple-touch-icon" href="icon-192.png">
     <link rel="manifest" href="manifest.json">
@@ -247,12 +247,15 @@
             scroll-behavior: auto;
         }
 
+        /* 現在行マーカー（既存の黄色） */
         #currentLineMarker {
             position: absolute;
             left: 0;
             width: 100%;
             background: rgba(255, 202, 40, 0.15);
+            /* 薄い黄色 */
             border-bottom: 2px solid var(--accent);
+            /* 黄色の下線 */
             pointer-events: none;
             z-index: 1;
             display: none;
@@ -355,6 +358,49 @@
             visibility: hidden;
             pointer-events: none;
         }
+
+        /* 追加：ハイライト層のスタイル */
+        #syntaxHighlight {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            color: transparent;
+            /* 文字は透明にする */
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            pointer-events: none;
+            /* 下にあるtextareaの操作を邪魔しない */
+            z-index: 2;
+            overflow: hidden;
+            /* スクロールはJSで同期 */
+        }
+
+        /* 見出しのハイライト色（ダークモード対応） */
+        .h-bg {
+            /* ここで好きな色を指定してください */
+            /* 背景色だけを指定 */
+            background: rgba(130, 170, 255, 0.2); /* 涼しげな薄い青色 */
+            /* background: rgba(255, 202, 40, 0.2); /* オレンジ */
+
+            /* 下線を完全に消去 */
+            border-bottom: none !important;
+
+            /* レイアウト維持のための設定 */
+            display: inline-block;
+            width: 100%;
+            vertical-align: top;
+            /* 行の隙間を埋めるため */
+            background: rgba(130, 170, 255, 0.2);
+        }
+
+        /* ダークモード時の見出し色をさらに調整したい場合 */
+        /* body.dark-mode .h-bg { */
+        /*     background: rgba(195, 232, 141, 0.15); */
+        /*     /* ダークモードでは薄い緑にする例 */
+        /*     border-bottom: 1px solid #c3e88d; */
+        /* }  */
     </style>
 </head>
 
@@ -377,6 +423,7 @@
         <div id="resizer"></div>
         <div id="editorWrapper">
             <div id="currentLineMarker"></div>
+            <div id="syntaxHighlight" class="editor-font"></div>
             <textarea id="editor" class="editor-font" spellcheck="false"></textarea>
         </div>
     </div>
@@ -610,6 +657,7 @@
                     updateStatus();
                     updateOutline();
                     updateMarker();
+                    updateSyntax();
                 };
                 reader.readAsText(file);
             };
@@ -652,6 +700,26 @@
                     outline.appendChild(item);
                 }
             });
+        }
+
+        const syntaxHighlight = document.getElementById('syntaxHighlight');
+
+        function updateSyntax() {
+            const text = editor.value;
+            // 「# 」で始まる行を抽出してハイライト用のタグで囲む
+            const highlightedText = text.split('\n').map(line => {
+                if (line.trim().startsWith('#')) {
+                    return `<span class="h-bg">${line}</span>`;
+                }
+                return line;
+            }).join('\n');
+
+            syntaxHighlight.innerHTML = highlightedText + '\n';
+            syncScroll();
+        }
+
+        function syncScroll() {
+            syntaxHighlight.scrollTop = editor.scrollTop;
         }
 
 
@@ -709,14 +777,24 @@
 
 
         // イベント
-        editor.addEventListener('input', () => { updateStatus(); updateMarker(); });
-        editor.addEventListener('click', () => { updateStatus(); updateMarker(); });
+        editor.addEventListener('input', () => {
+            updateStatus();
+            updateMarker();
+            updateSyntax(); // ←これ追加 
+        });
+        editor.addEventListener('click', () => {
+            updateStatus();
+            updateMarker();
+        });
         editor.addEventListener('keyup', (e) => {
             updateStatus(); updateMarker();
             if (e.key === 'Enter') updateOutline();
         });
 
-        editor.addEventListener('scroll', () => updateMarker(false), { passive: true });
+        editor.addEventListener('scroll', () => {
+            updateMarker(false);
+            syncScroll(); // ←これ追加
+        }, { passive: true });
         window.addEventListener('resize', () => updateMarker(false));
         window.addEventListener('keydown', e => {
             // Ctrl + S (または Cmd + S) で保存
@@ -738,7 +816,7 @@
     <div id="helpModal">
         <div id="helpContent">
             <h2 style="margin-top:0; border-bottom:1px solid var(--border); padding-bottom:10px;">
-                UME lite - Help
+                UME lite (V1.2) - Help
             </h2>
             <div class="help-body">
                 <br>
