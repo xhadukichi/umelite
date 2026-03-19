@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>UME lite v1.2</title>
+    <title>UME lite v1.3</title>
     <link rel="icon" href="icon-192.png">
     <link rel="apple-touch-icon" href="icon-192.png">
     <link rel="manifest" href="manifest.json">
@@ -512,8 +512,10 @@
                 updateSyntax();
             }
         }
+        
+        let isSaving = false;
 
-        function openFile() {
+       function openFile() {
             const input = document.createElement("input");
             input.type = "file";
             input.onchange = e => {
@@ -521,12 +523,25 @@
                 if (!file) return;
                 const reader = new FileReader();
                 reader.onload = () => {
-                    editor.value = reader.result;
-                    updateFileName(file.name, false); // *を消してファイル名を反映
-                    updateStatus();
-                    updateOutline();
-                    updateMarker();
-                    updateSyntax();
+                    // Chrome対策：setTimeoutで描画タスクを分離する
+                    setTimeout(() => {
+                        editor.value = reader.result;
+                        // *を消してファイル名を反映（falseを渡す）
+                        updateFileName(file.name, false); 
+                        
+                        // 全描画を強制更新
+                        updateStatus();
+                        updateOutline();
+                        updateMarker();
+                        updateSyntax();
+                        
+                        // スマホChrome用にフォーカスを一瞬当てて、スクロールを戻す
+                        editor.focus();
+                        editor.blur(); 
+                        editor.scrollTop = 0;
+                        
+                        showToast("開きました: " + file.name);
+                    }, 50);
                 };
                 reader.readAsText(file);
             };
@@ -534,61 +549,60 @@
         }
 
         async function saveFile() {
-		    // 現在表示されている名前（アスタリスクなし）を取得
-		    let baseNameForSuggest = currentFileName.replace(/ \*$/, "");
+            if (isSaving) return;
+            isSaving = true;
 
-		    // 連番生成
-		    const regex = /^(.+?)(?:\s\((\d+)\))?(\.[^.]+)$/;
-		    const match = baseNameForSuggest.match(regex);
-		    let suggestedName = baseNameForSuggest;
-		    if (match) {
-		        const base = match[1];
-		        const num = match[2] ? parseInt(match[2]) : 0;
-		        const ext = match[3];
-		        suggestedName = `${base} (${num + 1})${ext}`;
-		    }
+            let baseNameForSuggest = currentFileName.replace(/ \*$/, "");
 
-		    if ('showSaveFilePicker' in window) {
-		        try {
-		            const handle = await window.showSaveFilePicker({
-		                suggestedName: suggestedName,
-		                types: [{
-		                    description: 'Text Files',
-		                    accept: { 'text/plain': ['.txt', '.md'] }
-		                }]
-		            });
-		            
-		            // 保存実行
-		            const writable = await handle.createWritable();
-		            await writable.write(editor.value);
-		            await writable.close();
-		            
-		            // 【重要】ここで handle.name を直接使う
-		            const finalSavedName = handle.name;
-		            
-		            // デバッグ：これでユーザーが打ち直した名前が出るか確認
-		            // alert("システムが認識した名前: " + finalSavedName);
-		            
-		            updateFileName(finalSavedName, false);
-		            showToast("保存完了");
+            // 連番生成（既存ロジック維持）
+            const regex = /^(.+?)(?:\s\((\d+)\))?(\.[^.]+)$/;
+            const match = baseNameForSuggest.match(regex);
+            let suggestedName = baseNameForSuggest;
+            if (match) {
+                const base = match[1];
+                const num = match[2] ? parseInt(match[2]) : 0;
+                const ext = match[3];
+                suggestedName = `${base} (${num + 1})${ext}`;
+            }
 
-		        } catch (e) { console.log("Save error:", e); }
-		    } else {
-		        // スマホ用
-		        const userInputName = prompt("保存名を入力してください", suggestedName);
-		        if (!userInputName) return;
-
-		        const blob = new Blob([editor.value], { type: "text/plain" });
-		        const a = document.createElement("a");
-		        a.href = URL.createObjectURL(blob);
-		        a.download = userInputName;
-		        a.click();
-		        
-		        // ユーザーが入力したそのもの（userInputName）を反映
-		        updateFileName(userInputName, false);
-		        showToast("保存を開始");
-		    }
-		}
+            try {
+                if ('showSaveFilePicker' in window) {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName: suggestedName,
+                        types: [{
+                            description: 'Text Files',
+                            accept: { 'text/plain': ['.txt', '.md'] }
+                        }]
+                    });
+                    
+                    const writable = await handle.createWritable();
+                    await writable.write(editor.value);
+                    await writable.close();
+                    
+                    // ユーザーが決定した「最終的な名前」をセット
+                    updateFileName(handle.name, false);
+                    showToast("保存完了");
+                } else {
+                    // スマホ用（Prompt版）
+                    const userInputName = prompt("保存名を入力してください", suggestedName);
+                    if (userInputName) {
+                        const blob = new Blob([editor.value], { type: "text/plain" });
+                        const a = document.createElement("a");
+                        a.href = URL.createObjectURL(blob);
+                        a.download = userInputName;
+                        a.click();
+                        
+                        updateFileName(userInputName, false);
+                        showToast("保存を開始");
+                    }
+                }
+            } catch (e) {
+                console.log("Save error or cancel:", e);
+                // キャンセル時は isDirty を true のまま維持するので「*」は消えません
+            } finally {
+                isSaving = false;
+            }
+        }
 
         // --- エディタ・表示ロジック ---
 
@@ -660,7 +674,8 @@
         }
 
         function updateSyntax() {
-            const text = editor.value;
+            // textareaから直接最新の値を取る
+            const text = editor.value || "";
             const highlightedText = text.split('\n').map(line => {
                 if (line.trim().startsWith('#')) {
                     return `<span class="h-bg">${line}</span>`;
@@ -676,11 +691,17 @@
         // --- イベントリスナー ---
 
         editor.addEventListener('input', () => {
+            // 保存処理中の勝手な名前更新をブロック
+            if (isSaving) return;
+
             updateStatus();
             updateMarker();
             updateSyntax();
+            
+            // まだ「*」が付いていない時だけ付ける
             if (!isDirty) {
-                updateFileName(currentFileName, true); // 編集されたら*を付ける
+                isDirty = true;
+                renderFileName();
             }
         });
 
@@ -773,7 +794,7 @@
     <div id="helpModal">
         <div id="helpContent">
             <h2 style="margin-top:0; border-bottom:1px solid var(--border); padding-bottom:10px;">
-                UME lite (V1.2) - Help
+                UME lite (V1.3) - Help
             </h2>
             <div class="help-body">
                 <br>
