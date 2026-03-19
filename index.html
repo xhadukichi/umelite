@@ -535,67 +535,50 @@
         }
 
 		async function secureSaveFile() {
-    isSaving = true;
+		    // 1. 何はともあれ、一番最初にPickerを呼ぶ（ブラウザの機嫌を損ねないため）
+		    if (window.showSaveFilePicker) {
+		        try {
+		            // 名前計算は「引数の中」で直接やるか、最低限にする
+		            const suggest = currentFileName.replace(/ \*$/, "").replace(/^(.+?)(?:\s\((\d+)\))?(\.[^.]+)$/, (m, b, n, e) => {
+		                return `${b} (${n ? parseInt(n) + 1 : 1})${e}`;
+		            });
 
-    // 提案する名前の計算
-    let baseName = currentFileName.replace(/ \*$/, "");
-    let suggest = baseName;
-    const regex = /^(.+?)(?:\s\((\d+)\))?(\.[^.]+)$/;
-    const match = baseName.match(regex);
-    if (match) {
-        const b = match[1], n = match[2] ? parseInt(match[2]) : 0, e = match[3];
-        suggest = `${b} (${n + 1})${e}`;
-    }
+		            const handle = await window.showSaveFilePicker({
+		                suggestedName: suggest,
+		                types: [{
+		                    description: 'Text Files',
+		                    accept: { 'text/plain': ['.txt', '.md'] }
+		                }]
+		            });
 
-    // --- 【優先】PC版: File System Access API ---
-    if (typeof window.showSaveFilePicker === 'function') {
-        try {
-            const handle = await window.showSaveFilePicker({
-                suggestedName: suggest,
-                types: [{
-                    description: 'Text Files',
-                    accept: { 'text/plain': ['.txt', '.md'] }
-                }]
-            });
+		            // 以降の処理
+		            isSaving = true;
+		            const writable = await handle.createWritable();
+		            await writable.write(editor.value);
+		            await writable.close();
+		            updateFileName(handle.name, false);
+		            showToast("保存完了");
+		            isSaving = false;
+		            return; // ★ここで終われば prompt は絶対に出ない
 
-            const writable = await handle.createWritable();
-            await writable.write(editor.value);
-            await writable.close();
+		        } catch (e) {
+		            console.warn("Picker Error:", e);
+		            if (e.name === 'AbortError') return; // キャンセルなら終了
+		            // エラー時のみ下の else (prompt) へ
+		        }
+		    }
 
-            updateFileName(handle.name, false);
-            showToast("保存完了: " + handle.name);
-            
-            isSaving = false;
-            return; // ★成功したらここで終了（下の prompt には絶対に行かない）
-
-        } catch (e) {
-            isSaving = false;
-            // ユーザーが「キャンセル」を押した（AbortError）なら、何もせず終了
-            if (e.name === 'AbortError') {
-                console.log("Save was cancelled by user.");
-                return; 
-            }
-            // それ以外のエラー（権限不足など）が発生した場合は、下のレガシー版へ流す
-            console.warn("Picker failed, falling back to legacy download:", e);
-        }
-    }
-
-    // --- 【最終手段】スマホ/レガシー版: prompt & download ---
-    // ここに来るのは「PC版APIがない」か「PC版が重大なエラーで動かなかった」時だけです
-    const finalName = prompt("保存名を確認", suggest);
-    
-    if (finalName !== null) {
-        const blob = new Blob([editor.value], { type: "text/plain" });
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = finalName;
-        a.click();
-        updateFileName(finalName, false);
-        showToast("保存を開始しました");
-    }
-    
-    isSaving = false;
-}
+		    // 2. Pickerがそもそも存在しない、または上記で失敗した場合のみ実行
+		    const finalName = prompt("保存名を確認", currentFileName.replace(/ \*$/, ""));
+		    if (finalName) {
+		        const blob = new Blob([editor.value], { type: "text/plain" });
+		        const a = document.createElement("a");
+		        a.href = URL.createObjectURL(blob);
+		        a.download = finalName;
+		        a.click();
+		        updateFileName(finalName, false);
+		    }
+		}
 
 
 		// --- ショートカットキーの修正 ---
