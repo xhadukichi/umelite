@@ -409,13 +409,16 @@
     <div id="menu">
         <button onclick="newFile()">New</button>
         <button onclick="openFile()">Open</button>
-        <button onclick="saveFile()">Save</button>
+        <button onclick="secureSaveFile()">Save</button>
         <span style="opacity:0.3">|</span>
         <button onclick="adjustFont(2)">F+</button>
         <button onclick="adjustFont(-2)">F-</button>
         <button onclick="toggleDarkMode()">🌙</button>
         <span style="opacity:0.3">|</span>
         <button onclick="toggleHelp()">？</button>
+        <div id="topFileName" style="margin-left:8px; font-size:11px; color:var(--text); opacity:0.8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1;">
+        new_file.txt
+    	</div>
     </div>
 
     <div id="container">
@@ -458,66 +461,186 @@
         const resizer = document.getElementById('resizer');
         const searchBar = document.getElementById('searchBar');
         const fileNameDisplay = document.getElementById('fileNameDisplay');
-
-        // スマホのキーボード表示（Visual Viewport）に対応する処理
-        // ビジュアルビューポート（キーボード）対応
-        if (window.visualViewport) {
-            window.visualViewport.addEventListener('resize', () => {
-                const vv = window.visualViewport;
-                const offset = window.innerHeight - vv.height;
-
-                const statusBar = document.getElementById('statusBar');
-                const searchBar = document.getElementById('searchBar');
-
-                // バーをキーボードの直上に配置
-                statusBar.style.bottom = offset + "px";
-                searchBar.style.bottom = (offset + 35) + "px";
-
-                // エディタ（コンテナ）の高さを確保
-                const searchHeight = (searchBar.style.display === 'flex') ? searchBar.offsetHeight : 0;
-                document.getElementById('container').style.height = (vv.height - 40 - 35 - searchHeight) + "px";
-
-                updateMarker();
-            });
-        }
-
-        // 検索バーの表示切り替え
-        function toggleSearch() {
-            const isShowing = (searchBar.style.display === 'flex');
-            searchBar.style.display = isShowing ? 'none' : 'flex';
-
-            if (!isShowing) {
-                document.getElementById('searchInput').focus();
-            }
-
-            // レイアウトの再計算を強制
-            if (window.visualViewport) {
-                window.visualViewport.dispatchEvent(new Event('resize'));
-            }
-        }
-
-
+        const syntaxHighlight = document.getElementById('syntaxHighlight');
 
         let ticking = false;
-        let currentFileName = "new_file.txt"; // 現在のファイル名を保持
+        let currentFileName = "new_file.txt"; 
+        let isDirty = false; // 編集済みフラグ
+        let isSaving = false; // 保存処理中かどうかを判定するフラグ
 
-        // マーカー更新
+        // --- 表示更新系 ---
+
+        function renderFileName() {
+            const displayTag = isDirty ? " *" : "";
+            const fullName = currentFileName + displayTag;
+            const topDisplay = document.getElementById('topFileName');
+            if (topDisplay) {
+                topDisplay.innerText = fullName;
+                topDisplay.style.color = isDirty ? "var(--accent)" : "var(--text)";
+            }
+            if (fileNameDisplay) {
+                fileNameDisplay.innerText = fullName;
+            }
+        }
+
+        function updateFileName(name, dirty = false) {
+            currentFileName = name;
+            isDirty = dirty;
+            renderFileName();
+        }
+
+        function showToast(message) {
+            // トースト未実装の場合はalertで代用するか、前回のCSS/HTMLを追加してください
+            console.log("Toast: " + message);
+            // もしトースト用の要素があるなら:
+            const t = document.getElementById('toast');
+            if(t) {
+                t.textContent = message;
+                t.classList.add('show');
+                setTimeout(() => t.classList.remove('show'), 2000);
+            }
+        }
+
+        // --- 基本ファイル操作 ---
+
+        function newFile() {
+            if (confirm("新規作成しますか？")) {
+                editor.value = "";
+                outline.innerHTML = "";
+                updateFileName("new_file.txt", false);
+                updateStatus();
+                updateMarker();
+                updateSyntax();
+            }
+        }
+
+        function openFile() {
+            const input = document.createElement("input");
+            input.type = "file";
+            input.onchange = e => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = () => {
+                    editor.value = reader.result;
+                    updateFileName(file.name, false); // *を消してファイル名を反映
+                    updateStatus();
+                    updateOutline();
+                    updateMarker();
+                    updateSyntax();
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+		async function secureSaveFile() {
+		    // 保存処理開始（inputイベントによる自動更新をブロック）
+		    isSaving = true;
+
+		    // 【1】 提案する名前を計算（内部変数のみ。画面は絶対に変えない）
+		    let baseName = currentFileName.replace(/ \*$/, "");
+		    let suggest = baseName;
+
+		    const regex = /^(.+?)(?:\s\((\d+)\))?(\.[^.]+)$/;
+		    const match = baseName.match(regex);
+		    if (match) {
+		        const b = match[1];
+		        const n = match[2] ? parseInt(match[2]) : 0;
+		        const e = match[3];
+		        suggest = `${b} (${n + 1})${e}`;
+		    }
+
+		    try {
+		        if ('showSaveFilePicker' in window) {
+		            // 【PC版】いきなりOSのファイラーを呼ぶ（promptは絶対に出ない）
+		            const handle = await window.showSaveFilePicker({
+		                suggestedName: suggest,
+		                types: [{
+		                    description: 'Text Files',
+		                    accept: { 'text/plain': ['.txt', '.md'] }
+		                }]
+		            });
+
+		            // 書き込み処理
+		            const writable = await handle.createWritable();
+		            await writable.write(editor.value);
+		            await writable.close();
+
+		            // 【2】 ★保存成功後★ にOSから最終的な名前をもらって反映
+		            const actualName = handle.name;
+		            updateFileName(actualName, false);
+		            showToast("保存完了: " + actualName);
+
+		        } else {
+				    // 【スマホ/ローカル版】OSダイアログが出せないので、先に prompt で名前を決める
+				    const finalName = prompt("保存名を確認", suggest);
+				    
+				    // ユーザーが「キャンセル」を押した場合、ここで即座に終了。
+				    // 名前更新(updateFileName)を通らないので、元の「名前 *」が100%維持されます。
+				    if (finalName === null) {
+				        isSaving = false;
+				        return; 
+				    }
+
+				    // 保存（ダウンロード）処理を実行
+				    const blob = new Blob([editor.value], { type: "text/plain" });
+				    const a = document.createElement("a");
+				    a.href = URL.createObjectURL(blob);
+				    a.download = finalName;
+				    a.click();
+				    
+				    // 【ここがポイント】
+				    // ユーザーが prompt で「OK」を押し、ダウンロード処理が走った「後」で名前を更新。
+				    updateFileName(finalName, false);
+				    showToast("保存を開始しました");
+				}
+		    } catch (e) {
+		        // キャンセル時は何もしない（名前は維持される）
+		        console.log("Save cancelled");
+		    } finally {
+		        // 処理が終わったらフラグを戻す
+		        isSaving = false;
+		    }
+		}
+
+		// --- ショートカットキーの修正 ---
+		window.addEventListener('keydown', e => {
+		    // ここを secureSaveFile に変更
+		    if ((e.ctrlKey || e.metaKey) && e.key === 's') { 
+		        e.preventDefault(); 
+		        secureSaveFile(); 
+		    }
+		    if ((e.ctrlKey || e.metaKey) && e.key === 'o') { 
+		        e.preventDefault(); 
+		        openFile(); 
+		    }
+		});
+
+        // --- エディタ・表示ロジック ---
+
+        function updateStatus() {
+            const pos = editor.selectionStart;
+            const textBefore = editor.value.substring(0, pos);
+            const lines = textBefore.split('\n');
+            document.getElementById('ln').innerText = lines.length;
+            document.getElementById('col').innerText = lines[lines.length - 1].length;
+            document.getElementById('chars').innerText = editor.value.length;
+        }
+
         function updateMarker(scrollIntoView = false) {
             if (!ticking) {
                 window.requestAnimationFrame(() => {
                     const text = editor.value;
                     const pos = editor.selectionStart;
                     markerPosContainer.style.width = editor.clientWidth + "px";
-
                     const preText = text.substring(0, pos);
                     markerPosContainer.textContent = '';
                     const textNode = document.createTextNode(preText);
                     const span = document.createElement('span');
                     span.textContent = '|';
-
                     markerPosContainer.appendChild(textNode);
                     markerPosContainer.appendChild(span);
-
                     const caretY = span.offsetTop;
                     const lh = parseFloat(getComputedStyle(editor).lineHeight);
 
@@ -529,147 +652,16 @@
                             editor.scrollTop = caretY - (viewHeight / 2);
                         }
                     }
-
                     const finalTop = caretY - editor.scrollTop - 10;
                     marker.style.height = lh + "px";
                     marker.style.top = finalTop + "px";
                     marker.style.display = 'block';
-
                     ticking = false;
                 });
                 ticking = true;
             }
         }
 
-        // 検索
-        function searchAction(reverse) {
-            const query = document.getElementById('searchInput').value;
-            if (!query) return;
-            const text = editor.value;
-            let idx;
-            if (reverse) {
-                idx = text.lastIndexOf(query, editor.selectionStart - 1);
-                if (idx === -1) idx = text.lastIndexOf(query);
-            } else {
-                idx = text.indexOf(query, editor.selectionEnd);
-                if (idx === -1) idx = text.indexOf(query);
-            }
-            if (idx !== -1) {
-                editor.setSelectionRange(idx, idx + query.length);
-                updateMarker(true);
-                editor.focus();
-            }
-        }
-
-        // ステータス更新（COL 0始まり）
-        function updateStatus() {
-            const pos = editor.selectionStart;
-            const textBefore = editor.value.substring(0, pos);
-            const lines = textBefore.split('\n');
-            document.getElementById('ln').innerText = lines.length;
-            document.getElementById('col').innerText = lines[lines.length - 1].length; // 修正済
-            document.getElementById('chars').innerText = editor.value.length;
-        }
-
-        // ファイル名表示更新
-        function updateFileName(name) {
-            currentFileName = name;
-            fileNameDisplay.innerText = name;
-        }
-
-        // 基本機能
-        function newFile() {
-            if (confirm("新規作成しますか？")) {
-                editor.value = "";
-                outline.innerHTML = "";
-                updateFileName("new_file.txt");
-                updateStatus();
-                updateMarker();
-            }
-        }
-
-        async function saveFile() {
-		    let name = currentFileName;
-
-		    // 1. ファイル名から「名前」「(数値)」「拡張子」を分離するロジック
-		    // 例: "test (1).md" -> ["test", "1", ".md"]
-		    // 例: "test.md"     -> ["test", null, ".md"]
-		    const regex = /^(.+?)(?:\s\((\d+)\))?(\.[^.]+)$/;
-		    const match = name.match(regex);
-
-		    if (match) {
-		        const baseName = match[1];
-		        const currentNum = match[2] ? parseInt(match[2]) : 0;
-		        const ext = match[3];
-		        
-		        // 次の番号を生成
-		        name = `${baseName} (${currentNum + 1})${ext}`;
-		    }
-
-		    // 2. 保存処理
-		    if ('showSaveFilePicker' in window) {
-		        try {
-		            const handle = await window.showSaveFilePicker({
-		                suggestedName: name,
-		                types: [{
-		                    description: 'Text Files',
-		                    accept: { 'application/octet-stream': ['.md', '.txt'] }
-		                }]
-		            });
-		            await (await handle.createWritable()).write(editor.value);
-		            updateFileName(handle.name);
-		            showToast("保存完了！");
-		        } catch (e) { /* AbortErrorなど */ }
-		    } else {
-		        // スマホ（ダウンロードフォルダ）用
-		        const finalName = prompt("保存名を確認（ダウンロードフォルダに保存されます）", name);
-		        if (!finalName) return;
-
-		        const blob = new Blob([editor.value], { type: "text/plain" });
-		        const a = document.createElement("a");
-		        a.href = URL.createObjectURL(blob);
-		        a.download = finalName; // ここで OSに "(1)" を付けさせないための新しい名前を渡す
-		        a.click();
-		        
-		        updateFileName(finalName);
-		        showToast("保存を開始しました");
-		    }
-		}
-
-        function openFile() {
-            const input = document.createElement("input");
-            input.type = "file";
-            input.onchange = e => {
-                const file = e.target.files[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = () => {
-                    editor.value = reader.result;
-                    updateFileName(file.name); // ファイル名を反映
-                    updateStatus();
-                    updateOutline();
-                    updateMarker();
-                    updateSyntax();
-                };
-                reader.readAsText(file);
-            };
-            input.click();
-        }
-
-        function toggleOutline() { outline.classList.toggle('hidden'); resizer.classList.toggle('hidden'); setTimeout(() => updateMarker(), 50); }
-        function toggleSearch() { searchBar.style.display = (searchBar.style.display === 'flex') ? 'none' : 'flex'; if (searchBar.style.display === 'flex') document.getElementById('searchInput').focus(); }
-
-        function switchDirection() {
-            document.body.classList.toggle('portrait-mode');
-            outline.style.width = "";
-            outline.style.height = ""; // 高さをリセット（バグ修正）
-            updateMarker();
-        }
-
-        function adjustFont(step) { const style = getComputedStyle(editor); const newSize = parseFloat(style.fontSize) + step; editor.style.fontSize = markerPosContainer.style.fontSize = newSize + "px"; setTimeout(() => updateMarker(), 50); }
-        function toggleDarkMode() { document.body.classList.toggle('dark-mode'); }
-
-        // アウトライン更新（階層・字下げ・▼アイコン対応）
         function updateOutline() {
             outline.innerHTML = '';
             const lines = editor.value.split('\n');
@@ -694,113 +686,115 @@
             });
         }
 
-        const syntaxHighlight = document.getElementById('syntaxHighlight');
-
         function updateSyntax() {
             const text = editor.value;
-            // 「# 」で始まる行を抽出してハイライト用のタグで囲む
             const highlightedText = text.split('\n').map(line => {
                 if (line.trim().startsWith('#')) {
                     return `<span class="h-bg">${line}</span>`;
                 }
                 return line;
             }).join('\n');
-
             syntaxHighlight.innerHTML = highlightedText + '\n';
             syncScroll();
         }
 
-        function syncScroll() {
-            syntaxHighlight.scrollTop = editor.scrollTop;
-        }
+        function syncScroll() { syntaxHighlight.scrollTop = editor.scrollTop; }
 
+        // --- イベントリスナー ---
 
-
-        // ここに追加 ----------------
-        let isResizing = false;
-
-        // リサイズ実行関数
-        function handleResize(e) {
-            if (!isResizing) return;
-
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-
-            if (document.body.classList.contains('portrait-mode')) {
-                let newHeight = clientY - 40;
-                const maxHeight = window.innerHeight * 0.5; // 画面の50%
-                if (newHeight > maxHeight) newHeight = maxHeight;
-                if (newHeight < 50) newHeight = 50;
-                outline.style.height = newHeight + "px";
-            } else {
-                let newWidth = clientX;
-                if (newWidth < 50) newWidth = 50;
-                outline.style.width = newWidth + "px";
-            }
-            updateMarker();
-        }
-
-        // マウスイベント
-        resizer.addEventListener('mousedown', () => { isResizing = true; document.body.classList.add('resizing'); });
-        document.addEventListener('mousemove', handleResize);
-        document.addEventListener('mouseup', () => { isResizing = false; document.body.classList.remove('resizing'); });
-
-        // タッチイベント（スマホ用）
-        resizer.addEventListener('touchstart', (e) => {
-            isResizing = true;
-            document.body.classList.add('resizing');
-        }, { passive: false });
-        document.addEventListener('touchmove', handleResize, { passive: false });
-        document.addEventListener('touchend', () => { isResizing = false; document.body.classList.remove('resizing'); });
-
-
-
-        // ヘルプモーダル
-
-        function toggleHelp() {
-            document.getElementById("helpModal")
-                .classList.toggle("show");
-        }
-
-
-
-
-
-
-
-        // イベント
         editor.addEventListener('input', () => {
-            updateStatus();
-            updateMarker();
-            updateSyntax(); // ←これ追加 
-        });
-        editor.addEventListener('click', () => {
-            updateStatus();
-            updateMarker();
-        });
+		    updateStatus();
+		    updateMarker();
+		    updateSyntax();
+
+		    // 保存処理中でない、かつ、まだ「未保存マーク(*)」が付いていない時だけ実行
+		    if (!isSaving && !isDirty) {
+		        updateFileName(currentFileName, true); 
+		    }
+		});
+
+        editor.addEventListener('click', () => { updateStatus(); updateMarker(); });
         editor.addEventListener('keyup', (e) => {
             updateStatus(); updateMarker();
             if (e.key === 'Enter') updateOutline();
         });
+        editor.addEventListener('scroll', () => { updateMarker(false); syncScroll(); }, { passive: true });
 
-        editor.addEventListener('scroll', () => {
-            updateMarker(false);
-            syncScroll(); // ←これ追加
-        }, { passive: true });
-        window.addEventListener('resize', () => updateMarker(false));
+        // --- その他UI機能 ---
+
+        function toggleSearch() {
+            const isShowing = (searchBar.style.display === 'flex');
+            searchBar.style.display = isShowing ? 'none' : 'flex';
+            if (!isShowing) document.getElementById('searchInput').focus();
+            if (window.visualViewport) window.visualViewport.dispatchEvent(new Event('resize'));
+        }
+
+        function searchAction(reverse) {
+            const query = document.getElementById('searchInput').value;
+            if (!query) return;
+            const text = editor.value;
+            let idx = reverse ? text.lastIndexOf(query, editor.selectionStart - 1) : text.indexOf(query, editor.selectionEnd);
+            if (idx === -1) idx = reverse ? text.lastIndexOf(query) : text.indexOf(query);
+            if (idx !== -1) {
+                editor.setSelectionRange(idx, idx + query.length);
+                updateMarker(true);
+                editor.focus();
+            }
+        }
+
+        function toggleOutline() { 
+            outline.classList.toggle('hidden'); 
+            resizer.classList.toggle('hidden'); 
+            setTimeout(() => updateMarker(), 50); 
+        }
+
+        function switchDirection() {
+            document.body.classList.toggle('portrait-mode');
+            outline.style.width = ""; outline.style.height = "";
+            updateMarker();
+        }
+
+        function adjustFont(step) {
+            const style = getComputedStyle(editor);
+            const newSize = parseFloat(style.fontSize) + step;
+            editor.style.fontSize = syntaxHighlight.style.fontSize = markerPosContainer.style.fontSize = newSize + "px";
+            setTimeout(() => updateMarker(), 50);
+        }
+
+        function toggleDarkMode() { document.body.classList.toggle('dark-mode'); }
+        function toggleHelp() { document.getElementById("helpModal").classList.toggle("show"); }
+
+        // リサイズ処理
+        let isResizing = false;
+        function handleResize(e) {
+            if (!isResizing) return;
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            if (document.body.classList.contains('portrait-mode')) {
+                let newHeight = clientY - 40;
+                outline.style.height = Math.min(newHeight, window.innerHeight * 0.5) + "px";
+            } else {
+                outline.style.width = Math.max(clientX, 50) + "px";
+            }
+            updateMarker();
+        }
+
+        resizer.addEventListener('mousedown', () => { isResizing = true; document.body.classList.add('resizing'); });
+        document.addEventListener('mousemove', handleResize);
+        document.addEventListener('mouseup', () => { isResizing = false; document.body.classList.remove('resizing'); });
+        resizer.addEventListener('touchstart', () => { isResizing = true; document.body.classList.add('resizing'); }, { passive: false });
+        document.addEventListener('touchmove', handleResize, { passive: false });
+        document.addEventListener('touchend', () => { isResizing = false; document.body.classList.remove('resizing'); });
+
+        // ショートカット
         window.addEventListener('keydown', e => {
-            // Ctrl + S (または Cmd + S) で保存
-            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-                e.preventDefault();
-                saveFile();
-            }
-            // Ctrl + O (または Cmd + O) でファイルを開く
-            if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
-                e.preventDefault();
-                openFile();
-            }
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); secureSaveFile(); }
+            if ((e.ctrlKey || e.metaKey) && e.key === 'o') { e.preventDefault(); openFile(); }
         });
 
+        // 起動時初期化
+        document.getElementById('topFileName').onclick = () => showToast(currentFileName + (isDirty ? " (未保存)" : ""));
+        updateFileName("new_file.txt", false);
         updateStatus();
         updateOutline();
     </script>
