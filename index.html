@@ -589,60 +589,52 @@
         }
 
         async function saveFile() {
-            // 1. 拡張子のチェックと補完
-            let suggestedName = currentFileName;
-            const hasExtension = /\.[a-z0-9]+$/i.test(suggestedName); // 何らかの拡張子があるか
+		    let name = currentFileName;
 
-            if (!hasExtension) {
-                suggestedName += ".txt";
-            }
+		    // 1. ファイル名から「名前」「(数値)」「拡張子」を分離するロジック
+		    // 例: "test (1).md" -> ["test", "1", ".md"]
+		    // 例: "test.md"     -> ["test", null, ".md"]
+		    const regex = /^(.+?)(?:\s\((\d+)\))?(\.[^.]+)$/;
+		    const match = name.match(regex);
 
-            if ('showSaveFilePicker' in window) {
-                try {
-                    const options = {
-                        suggestedName: suggestedName,
-                        types: [
-                            {
-                                description: 'すべてのファイル',
-                                // ここを '*/*' にすることで、ブラウザによる強制的な .txt 付与を阻止します
-                                accept: { '*/*': ['.txt', '.md', '.html', '.css', '.js', '.csv'] },
-                            },
-                        ],
-                    };
+		    if (match) {
+		        const baseName = match[1];
+		        const currentNum = match[2] ? parseInt(match[2]) : 0;
+		        const ext = match[3];
+		        
+		        // 次の番号を生成
+		        name = `${baseName} (${currentNum + 1})${ext}`;
+		    }
 
-                    const handle = await window.showSaveFilePicker(options);
-                    const writable = await handle.createWritable();
-                    await writable.write(editor.value);
-                    await writable.close();
+		    // 2. 保存処理
+		    if ('showSaveFilePicker' in window) {
+		        try {
+		            const handle = await window.showSaveFilePicker({
+		                suggestedName: name,
+		                types: [{
+		                    description: 'Text Files',
+		                    accept: { 'application/octet-stream': ['.md', '.txt'] }
+		                }]
+		            });
+		            await (await handle.createWritable()).write(editor.value);
+		            updateFileName(handle.name);
+		            showToast("保存完了！");
+		        } catch (e) { /* AbortErrorなど */ }
+		    } else {
+		        // スマホ（ダウンロードフォルダ）用
+		        const finalName = prompt("保存名を確認（ダウンロードフォルダに保存されます）", name);
+		        if (!finalName) return;
 
-                    // 保存された実際の名前（handle.name）を反映。
-                    // ブラウザが勝手に付けた場合でも、ここで正しい名前を取得できます。
-                    updateFileName(handle.name);
-
-                } catch (err) {
-                    if (err.name !== 'AbortError') {
-                        alert("保存に失敗しました。権限のある場所を選んでください。");
-                    }
-                }
-            } else {
-                // スマホ・旧ブラウザ用
-                const name = prompt("保存するファイル名を入力してください", suggestedName);
-                if (name === null) return;
-
-                let finalName = name.trim() || "note.txt";
-                // .md などが含まれていなければ .txt を足す
-                if (!/\.[a-z0-9]+$/i.test(finalName)) {
-                    finalName += ".txt";
-                }
-
-                const blob = new Blob([editor.value], { type: "text/plain" });
-                const a = document.createElement("a");
-                a.href = URL.createObjectURL(blob);
-                a.download = finalName;
-                a.click();
-                updateFileName(finalName);
-            }
-        }
+		        const blob = new Blob([editor.value], { type: "text/plain" });
+		        const a = document.createElement("a");
+		        a.href = URL.createObjectURL(blob);
+		        a.download = finalName; // ここで OSに "(1)" を付けさせないための新しい名前を渡す
+		        a.click();
+		        
+		        updateFileName(finalName);
+		        showToast("保存を開始しました");
+		    }
+		}
 
         function openFile() {
             const input = document.createElement("input");
