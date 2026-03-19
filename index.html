@@ -535,74 +535,72 @@
         }
 
 		async function secureSaveFile() {
-		    // 保存処理開始（inputイベントによる自動更新をブロック）
-		    isSaving = true;
+    isSaving = true;
 
-		    // 【1】 提案する名前を計算（内部変数のみ。画面は絶対に変えない）
-		    let baseName = currentFileName.replace(/ \*$/, "");
-		    let suggest = baseName;
+    // 名前候補の作成
+    let baseName = currentFileName.replace(/ \*$/, "");
+    let suggest = baseName;
+    const regex = /^(.+?)(?:\s\((\d+)\))?(\.[^.]+)$/;
+    const match = baseName.match(regex);
+    if (match) {
+        const b = match[1], n = match[2] ? parseInt(match[2]) : 0, e = match[3];
+        suggest = `${b} (${n + 1})${e}`;
+    }
 
-		    const regex = /^(.+?)(?:\s\((\d+)\))?(\.[^.]+)$/;
-		    const match = baseName.match(regex);
-		    if (match) {
-		        const b = match[1];
-		        const n = match[2] ? parseInt(match[2]) : 0;
-		        const e = match[3];
-		        suggest = `${b} (${n + 1})${e}`;
-		    }
+    // 1. まず、PC用の最新APIを試みる
+    if (window.showSaveFilePicker) {
+        try {
+            const handle = await window.showSaveFilePicker({
+                suggestedName: suggest,
+                types: [{
+                    description: 'Text Files',
+                    accept: { 'text/plain': ['.txt', '.md'] }
+                }]
+            });
+            const writable = await handle.createWritable();
+            await writable.write(editor.value);
+            await writable.close();
+            updateFileName(handle.name, false);
+            showToast("保存完了: " + handle.name);
+            isSaving = false;
+            return; // ここで成功すれば終了。prompt側へは絶対に行かない。
+        } catch (e) {
+            // ユーザーが「キャンセル」を押した場合は名前を変えずに終了
+            if (e.name === 'AbortError') {
+                console.log("ユーザーが保存をキャンセルしました");
+                isSaving = false;
+                return; 
+            }
+            // それ以外のエラー（セキュリティ制限など）は下のレガシー処理へ流す
+            console.error("Picker Error:", e);
+        }
+    }
 
-		    try {
-		        if ('showSaveFilePicker' in window) {
-		            // 【PC版】いきなりOSのファイラーを呼ぶ（promptは絶対に出ない）
-		            const handle = await window.showSaveFilePicker({
-		                suggestedName: suggest,
-		                types: [{
-		                    description: 'Text Files',
-		                    accept: { 'text/plain': ['.txt', '.md'] }
-		                }]
-		            });
+    // 2. PC版APIが使えない、またはエラーが出た場合のみ「スマホ/レガシー版」を実行
+    // ※ ここを prompt なしの「強制ダウンロード」にすれば、promptは地球上から消えます。
+    
+    // 【究極の選択】prompt を出すか、出さないか。
+    // A: 従来通り prompt を出す（スマホ対応のため）
+    const finalName = prompt("【互換モード】保存名を入力", suggest);
+    if (finalName === null) {
+        isSaving = false;
+        return;
+    }
 
-		            // 書き込み処理
-		            const writable = await handle.createWritable();
-		            await writable.write(editor.value);
-		            await writable.close();
+    /* // B: prompt すら出さず、名前固定で即座にダウンロードさせるならこっち
+    const finalName = suggest; 
+    */
 
-		            // 【2】 ★保存成功後★ にOSから最終的な名前をもらって反映
-		            const actualName = handle.name;
-		            updateFileName(actualName, false);
-		            showToast("保存完了: " + actualName);
-
-		        } else {
-				    // 【スマホ/ローカル版】OSダイアログが出せないので、先に prompt で名前を決める
-				    const finalName = prompt("保存名を確認", suggest);
-				    
-				    // ユーザーが「キャンセル」を押した場合、ここで即座に終了。
-				    // 名前更新(updateFileName)を通らないので、元の「名前 *」が100%維持されます。
-				    if (finalName === null) {
-				        isSaving = false;
-				        return; 
-				    }
-
-				    // 保存（ダウンロード）処理を実行
-				    const blob = new Blob([editor.value], { type: "text/plain" });
-				    const a = document.createElement("a");
-				    a.href = URL.createObjectURL(blob);
-				    a.download = finalName;
-				    a.click();
-				    
-				    // 【ここがポイント】
-				    // ユーザーが prompt で「OK」を押し、ダウンロード処理が走った「後」で名前を更新。
-				    updateFileName(finalName, false);
-				    showToast("保存を開始しました");
-				}
-		    } catch (e) {
-		        // キャンセル時は何もしない（名前は維持される）
-		        console.log("Save cancelled");
-		    } finally {
-		        // 処理が終わったらフラグを戻す
-		        isSaving = false;
-		    }
-		}
+    const blob = new Blob([editor.value], { type: "text/plain" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = finalName;
+    a.click();
+    
+    updateFileName(finalName, false);
+    showToast("ダウンロードとして保存しました");
+    isSaving = false;
+}
 
 		// --- ショートカットキーの修正 ---
 		window.addEventListener('keydown', e => {
