@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>UME lite v1.4</title>
+    <title>UME lite v1.5</title>
     <link rel="icon" href="icon-192.png">
     <link rel="apple-touch-icon" href="icon-192.png">
     <link rel="manifest" href="manifest.json">
@@ -402,6 +402,44 @@
         /*     /* ダークモードでは薄い緑にする例 */
         /*     border-bottom: 1px solid #c3e88d; */
         /* }  */
+
+        /* アウトライン項目の基本設定 */
+        .outline-item {
+            padding: 4px 8px;
+            cursor: pointer;
+            font-size: 13px;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .outline-item:hover {
+            background-color: var(--menu-bg);
+        }
+
+        /* 階層ごとのインデント（以前の設定があれば不要です） */
+        .outline-h1 {
+            padding-left: 10px;
+            font-weight: bold;
+        }
+
+        .outline-h2 {
+            padding-left: 25px;
+        }
+
+        .outline-h3 {
+            padding-left: 40px;
+        }
+
+        /* 【重要】ハイライト時の見た目 */
+        #outline .active {
+            background-color: rgba(255, 202, 40, 0.3) !important;
+            /* 黄色系（アクセントカラー） */
+            color: var(--text);
+            border-left: 5px solid var(--accent);
+            font-weight: bold;
+        }
     </style>
 </head>
 
@@ -665,27 +703,70 @@
         }
 
         function updateOutline() {
-            outline.innerHTML = '';
-            const lines = editor.value.split('\n');
-            lines.forEach((line, i) => {
-                const trimmed = line.trim();
-                if (trimmed.startsWith('#')) {
-                    const match = trimmed.match(/^(#+)/);
-                    const level = match ? match[1].length : 1;
-                    const item = document.createElement('div');
-                    const indent = 10 + (level - 1) * 20;
-                    item.style.cssText = `padding:8px 10px 8px ${indent}px; cursor:pointer; border-bottom:1px solid var(--border); font-size:13px; display:flex; align-items:center; gap:5px;`;
-                    const titleText = trimmed.replace(/^#+\s*/, '');
-                    item.innerHTML = `<span style="opacity: 0.5; font-size: 10px;">▼</span> ${titleText}`;
-                    item.onclick = () => {
-                        const charPos = lines.slice(0, i).join('\n').length + (i > 0 ? 1 : 0);
-                        editor.setSelectionRange(charPos, charPos);
+            // HTMLのID「outline」に合わせる
+            const outlineArea = document.getElementById("outline");
+            if (!outlineArea) return;
+
+            const text = editor.value;
+            const lines = text.split("\n");
+            outlineArea.innerHTML = "";
+
+            lines.forEach((line, index) => {
+                // 見出しの正規表現を修正（#の後にスペースがあるもの）
+                const match = line.match(/^(#{1,6}) (.*)/);
+                if (match) {
+                    const level = match[1].length;
+                    const title = match[2];
+                    const div = document.createElement("div");
+
+                    // 【復活！】レベルに応じた「▼」やインデント用のクラスを付与
+                    // 以前のCSSに合わせて outline-item と outline-h1〜6 をセット
+                    div.className = `outline-item outline-h${level}`;
+
+                    // 見出しレベルに応じて先頭に記号をつける（お好みで調整してください）
+                    const prefix = "▼ ".repeat(1); // 以前のスタイルに合わせて調整
+                    div.textContent = prefix + title;
+
+                    div.dataset.line = index;
+
+                    div.onclick = () => {
+                        const targetLine = index;
+                        const pos = lines.slice(0, targetLine).join("\n").length + (targetLine > 0 ? 1 : 0);
+                        editor.setSelectionRange(pos, pos);
                         editor.focus();
-                        updateMarker(true);
+                        setTimeout(() => updateMarker(true), 10);
+                        highlightOutline();
                     };
-                    outline.appendChild(item);
+                    outlineArea.appendChild(div);
                 }
             });
+            highlightOutline();
+        }
+
+        function highlightOutline() {
+            const text = editor.value;
+            const pos = editor.selectionStart;
+            const currentLine = text.substring(0, pos).split("\n").length - 1;
+
+            // outlineの中にある全divを取得
+            const items = document.querySelectorAll("#outline div");
+            let activeItem = null;
+
+            items.forEach(item => {
+                item.classList.remove("active");
+                const itemLine = parseInt(item.dataset.line);
+
+                // 現在のカーソル位置より上にある、一番近い見出しを特定
+                if (itemLine <= currentLine) {
+                    activeItem = item;
+                }
+            });
+
+            if (activeItem) {
+                activeItem.classList.add("active");
+                // アクティブな見出しがアウトライン内で隠れないようスクロール
+                activeItem.scrollIntoView({ block: "nearest", behavior: "smooth" });
+            }
         }
 
         function updateSyntax() {
@@ -701,33 +782,52 @@
             syncScroll();
         }
 
+
         function syncScroll() { syntaxHighlight.scrollTop = editor.scrollTop; }
 
-        // --- イベントリスナー ---
-
+        // --- イベントリスナー --------------------------------------------------
+        // 1. 本文が書き換えられた時（input）
         editor.addEventListener('input', () => {
-            // 保存処理中の勝手な名前更新をブロック
             if (isSaving) return;
 
             updateStatus();
             updateMarker();
             updateSyntax();
+            updateOutline();    // ← 変更のたびにアウトラインも更新
+            highlightOutline(); // ← ついでにハイライトも更新
 
-            // まだ「*」が付いていない時だけ付ける
             if (!isDirty) {
                 isDirty = true;
                 renderFileName();
             }
         });
 
-        editor.addEventListener('click', () => { updateStatus(); updateMarker(); });
+        // 2. カーソルが動いた時（keyup, click）
+        // 文字を打たなくても、矢印キーで移動したりクリックしたりした時にハイライトを当てる
         editor.addEventListener('keyup', (e) => {
-            updateStatus(); updateMarker();
+            updateStatus();
+            updateMarker();
+            highlightOutline();
+
+            // Enterを押した時だけアウトライン全体を再描画（効率化のため）
             if (e.key === 'Enter') updateOutline();
         });
-        editor.addEventListener('scroll', () => { updateMarker(false); syncScroll(); }, { passive: true });
 
-        // --- その他UI機能 ---
+        editor.addEventListener('click', () => {
+            updateStatus();
+            updateMarker();
+            highlightOutline();
+        });
+
+        // 3. スクロールした時
+        editor.addEventListener('scroll', () => {
+            updateMarker(false);
+            syncScroll();
+        }, { passive: true });
+
+
+
+        // --- その他UI機能 -----------------------------------------------
 
         function toggleSearch() {
             const isShowing = (searchBar.style.display === 'flex');
@@ -809,7 +909,7 @@
     <div id="helpModal">
         <div id="helpContent">
             <h2 style="margin-top:0; border-bottom:1px solid var(--border); padding-bottom:10px;">
-                UME lite (V1.4) - Help
+                UME lite (V1.5) - Help
             </h2>
             <div class="help-body">
                 <br>
