@@ -535,10 +535,8 @@
         }
 
 		async function secureSaveFile() {
-		    // 1. Pickerの有無で分岐
 		    if (window.showSaveFilePicker) {
 		        try {
-		            // OSの保存画面を表示（ここでユーザーの操作を待つ）
 		            const handle = await window.showSaveFilePicker({
 		                suggestedName: currentFileName.replace(/ \*$/, ""),
 		                types: [{
@@ -547,34 +545,29 @@
 		                }]
 		            });
 
-		            // --- ユーザーが「保存」を押した後の処理 ---
-		            isSaving = true; // 書き込み中のinputイベントをブロック
-		            
+		            // ★ ここから保存確定処理
 		            const writable = await handle.createWritable();
 		            await writable.write(editor.value);
 		            await writable.close();
 
-		            // ★ここで初めて名前を更新（OSで変更された名前を反映し、*を消す）
+		            // 保存が完了してからフラグを立てて、名前を更新する
+		            isSaving = true; 
 		            updateFileName(handle.name, false); 
 		            showToast("保存完了: " + handle.name);
+		            isSaving = false;
 
 		        } catch (e) {
-		            // ユーザーが「キャンセル」を押した、またはエラー時
-		            console.log("保存がキャンセルされました。状態を維持します。");
-		            // updateFileName を呼ばないので、名前も「*」もそのまま残ります。
-		        } finally {
-		            isSaving = false;
+		            console.log("保存キャンセル:", e.name);
+		            // 何もしない（isDirty も currentFileName も維持されるので * は消えない）
 		        }
 		    } else {
-		        // --- Pickerがない環境（スマホ等） ---
+		        // スマホ用
 		        const finalName = currentFileName.replace(/ \*$/, ""); 
 		        const blob = new Blob([editor.value], { type: "text/plain" });
 		        const a = document.createElement("a");
 		        a.href = URL.createObjectURL(blob);
 		        a.download = finalName;
 		        a.click();
-		        
-		        // ダウンロード開始後に更新（スマホはキャンセル判定が取れないため）
 		        updateFileName(finalName, false);
 		    }
 		}
@@ -761,11 +754,7 @@
         document.addEventListener('touchmove', handleResize, { passive: false });
         document.addEventListener('touchend', () => { isResizing = false; document.body.classList.remove('resizing'); });
 
-        // ショートカット
-        window.addEventListener('keydown', e => {
-            if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); secureSaveFile(); }
-            if ((e.ctrlKey || e.metaKey) && e.key === 'o') { e.preventDefault(); openFile(); }
-        });
+
 
         // 起動時初期化
         document.getElementById('topFileName').onclick = () => showToast(currentFileName + (isDirty ? " (未保存)" : ""));
