@@ -484,10 +484,13 @@
         }
 
         function updateFileName(name, dirty = false) {
-            currentFileName = name;
-            isDirty = dirty;
-            renderFileName();
-        }
+		    // 保存処理中(isSaving)なら、外部からの名前書き換えを一切無視する
+		    if (isSaving && dirty) return; 
+
+		    currentFileName = name;
+		    isDirty = dirty;
+		    renderFileName();
+		}
 
         function showToast(message) {
             // トースト未実装の場合はalertで代用するか、前回のCSS/HTMLを追加してください
@@ -536,30 +539,34 @@
 
 		async function secureSaveFile() {
 		    if (window.showSaveFilePicker) {
-		        try {
-		            const handle = await window.showSaveFilePicker({
-		                suggestedName: currentFileName.replace(/ \*$/, ""),
-		                types: [{
-		                    description: 'Text Files',
-		                    accept: { 'text/plain': ['.txt', '.md'] }
-		                }]
-		            });
+		       try {
+			        const handle = await window.showSaveFilePicker({
+			            suggestedName: currentFileName.replace(/ \*$/, ""),
+			            types: [{
+			                description: 'Text Files',
+			                accept: { 'text/plain': ['.txt', '.md'] }
+			            }]
+			        });
 
-		            // ★ ここから保存確定処理
-		            const writable = await handle.createWritable();
-		            await writable.write(editor.value);
-		            await writable.close();
+			        // ★ 2. 実際に書き込む
+			        const writable = await handle.createWritable();
+			        await writable.write(editor.value);
+			        await writable.close();
 
-		            // 保存が完了してからフラグを立てて、名前を更新する
-		            isSaving = true; 
-		            updateFileName(handle.name, false); 
-		            showToast("保存完了: " + handle.name);
-		            isSaving = false;
+			        // ★ 3. 全てが成功した「後」で、初めて dirty を false にする
+			        currentFileName = handle.name;
+			        isDirty = false;
+			        renderFileName();
+			        
+			        showToast("保存完了: " + handle.name);
 
-		        } catch (e) {
-		            console.log("保存キャンセル:", e.name);
-		            // 何もしない（isDirty も currentFileName も維持されるので * は消えない）
-		        }
+			    } catch (e) {
+			        console.log("User cancelled or error:", e.name);
+			        // キャンセル時は isDirty を true のまま維持する
+			    } finally {
+			        // ★ 4. 最後にガードを解く
+			        isSaving = false;
+			    }
 		    } else {
 		        // スマホ用
 		        const finalName = currentFileName.replace(/ \*$/, ""); 
@@ -671,12 +678,14 @@
         // --- イベントリスナー ---
 
         editor.addEventListener('input', () => {
+		    // 保存操作が始まったら、inputによる「*」付けを完全に停止させる
+		    if (isSaving) return; 
+
 		    updateStatus();
 		    updateMarker();
 		    updateSyntax();
 
-		    // 保存処理中でない、かつ、まだ「未保存マーク(*)」が付いていない時だけ実行
-		    if (!isSaving && !isDirty) {
+		    if (!isDirty) {
 		        updateFileName(currentFileName, true); 
 		    }
 		});
