@@ -535,44 +535,49 @@
         }
 
 		async function secureSaveFile() {
-		    // 1. 保存中フラグなどは後回し。何よりも先にPickerを呼ぶ。
-		    if (!window.showSaveFilePicker) {
-		        // Pickerがない環境（スマホ等）では、単に「名前固定」でダウンロードさせる。
-		        // これで prompt は物理的に出ようがありません。
+		    // 1. Pickerの有無で分岐
+		    if (window.showSaveFilePicker) {
+		        try {
+		            // OSの保存画面を表示（ここでユーザーの操作を待つ）
+		            const handle = await window.showSaveFilePicker({
+		                suggestedName: currentFileName.replace(/ \*$/, ""),
+		                types: [{
+		                    description: 'Text Files',
+		                    accept: { 'text/plain': ['.txt', '.md'] }
+		                }]
+		            });
+
+		            // --- ユーザーが「保存」を押した後の処理 ---
+		            isSaving = true; // 書き込み中のinputイベントをブロック
+		            
+		            const writable = await handle.createWritable();
+		            await writable.write(editor.value);
+		            await writable.close();
+
+		            // ★ここで初めて名前を更新（OSで変更された名前を反映し、*を消す）
+		            updateFileName(handle.name, false); 
+		            showToast("保存完了: " + handle.name);
+
+		        } catch (e) {
+		            // ユーザーが「キャンセル」を押した、またはエラー時
+		            console.log("保存がキャンセルされました。状態を維持します。");
+		            // updateFileName を呼ばないので、名前も「*」もそのまま残ります。
+		        } finally {
+		            isSaving = false;
+		        }
+		    } else {
+		        // --- Pickerがない環境（スマホ等） ---
+		        const finalName = currentFileName.replace(/ \*$/, ""); 
 		        const blob = new Blob([editor.value], { type: "text/plain" });
 		        const a = document.createElement("a");
 		        a.href = URL.createObjectURL(blob);
-		        a.download = currentFileName.replace(/ \*$/, ""); 
+		        a.download = finalName;
 		        a.click();
-		        updateFileName(a.download, false);
-		        return;
-		    }
-
-		    try {
-		        // ブラウザの機嫌を損ねないよう、関数呼び出しの直後にPickerを配置
-		        const handle = await window.showSaveFilePicker({
-		            suggestedName: currentFileName.replace(/ \*$/, ""),
-		            types: [{
-		                description: 'Text Files',
-		                accept: { 'text/plain': ['.txt', '.md'] }
-		            }]
-		        });
-
-		        isSaving = true;
-		        const writable = await handle.createWritable();
-		        await writable.write(editor.value);
-		        await writable.close();
-		        updateFileName(handle.name, false);
-		        showToast("保存完了");
-		    } catch (e) {
-		        // キャンセル時は静かに終わる。
-		        // ここに何も書かなければ、prompt が出る余地はありません。
-		        console.log("Save interaction finished.");
-		    } finally {
-		        isSaving = false;
+		        
+		        // ダウンロード開始後に更新（スマホはキャンセル判定が取れないため）
+		        updateFileName(finalName, false);
 		    }
 		}
-
 
 		// --- ショートカットキーの修正 ---
 		window.addEventListener('keydown', e => {
