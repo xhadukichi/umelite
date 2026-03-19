@@ -535,48 +535,41 @@
         }
 
 		async function secureSaveFile() {
-		    // 1. 何はともあれ、一番最初にPickerを呼ぶ（ブラウザの機嫌を損ねないため）
-		    if (window.showSaveFilePicker) {
-		        try {
-		            // 名前計算は「引数の中」で直接やるか、最低限にする
-		            const suggest = currentFileName.replace(/ \*$/, "").replace(/^(.+?)(?:\s\((\d+)\))?(\.[^.]+)$/, (m, b, n, e) => {
-		                return `${b} (${n ? parseInt(n) + 1 : 1})${e}`;
-		            });
-
-		            const handle = await window.showSaveFilePicker({
-		                suggestedName: suggest,
-		                types: [{
-		                    description: 'Text Files',
-		                    accept: { 'text/plain': ['.txt', '.md'] }
-		                }]
-		            });
-
-		            // 以降の処理
-		            isSaving = true;
-		            const writable = await handle.createWritable();
-		            await writable.write(editor.value);
-		            await writable.close();
-		            updateFileName(handle.name, false);
-		            showToast("保存完了");
-		            isSaving = false;
-		            return; // ★ここで終われば prompt は絶対に出ない
-
-		        } catch (e) {
-		            console.warn("Picker Error:", e);
-		            if (e.name === 'AbortError') return; // キャンセルなら終了
-		            // エラー時のみ下の else (prompt) へ
-		        }
-		    }
-
-		    // 2. Pickerがそもそも存在しない、または上記で失敗した場合のみ実行
-		    const finalName = prompt("保存名を確認", currentFileName.replace(/ \*$/, ""));
-		    if (finalName) {
+		    // 1. 保存中フラグなどは後回し。何よりも先にPickerを呼ぶ。
+		    if (!window.showSaveFilePicker) {
+		        // Pickerがない環境（スマホ等）では、単に「名前固定」でダウンロードさせる。
+		        // これで prompt は物理的に出ようがありません。
 		        const blob = new Blob([editor.value], { type: "text/plain" });
 		        const a = document.createElement("a");
 		        a.href = URL.createObjectURL(blob);
-		        a.download = finalName;
+		        a.download = currentFileName.replace(/ \*$/, ""); 
 		        a.click();
-		        updateFileName(finalName, false);
+		        updateFileName(a.download, false);
+		        return;
+		    }
+
+		    try {
+		        // ブラウザの機嫌を損ねないよう、関数呼び出しの直後にPickerを配置
+		        const handle = await window.showSaveFilePicker({
+		            suggestedName: currentFileName.replace(/ \*$/, ""),
+		            types: [{
+		                description: 'Text Files',
+		                accept: { 'text/plain': ['.txt', '.md'] }
+		            }]
+		        });
+
+		        isSaving = true;
+		        const writable = await handle.createWritable();
+		        await writable.write(editor.value);
+		        await writable.close();
+		        updateFileName(handle.name, false);
+		        showToast("保存完了");
+		    } catch (e) {
+		        // キャンセル時は静かに終わる。
+		        // ここに何も書かなければ、prompt が出る余地はありません。
+		        console.log("Save interaction finished.");
+		    } finally {
+		        isSaving = false;
 		    }
 		}
 
