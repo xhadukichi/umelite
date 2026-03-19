@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>UME lite v1.3</title>
+    <title>UME lite v1.4</title>
     <link rel="icon" href="icon-192.png">
     <link rel="apple-touch-icon" href="icon-192.png">
     <link rel="manifest" href="manifest.json">
@@ -381,7 +381,8 @@
         .h-bg {
             /* ここで好きな色を指定してください */
             /* 背景色だけを指定 */
-            background: rgba(130, 170, 255, 0.2); /* 涼しげな薄い青色 */
+            background: rgba(130, 170, 255, 0.2);
+            /* 涼しげな薄い青色 */
             /* background: rgba(255, 202, 40, 0.2); /* オレンジ */
 
             /* 下線を完全に消去 */
@@ -416,9 +417,10 @@
         <button onclick="toggleDarkMode()">🌙</button>
         <span style="opacity:0.3">|</span>
         <button onclick="toggleHelp()">？</button>
-        <div id="topFileName" style="margin-left:8px; font-size:11px; color:var(--text); opacity:0.8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1;">
-        new_file.txt
-    	</div>
+        <div id="topFileName"
+            style="margin-left:8px; font-size:11px; color:var(--text); opacity:0.8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1;">
+            new_file.txt
+        </div>
     </div>
 
     <div id="container">
@@ -464,7 +466,7 @@
         const syntaxHighlight = document.getElementById('syntaxHighlight');
 
         let ticking = false;
-        let currentFileName = "new_file.txt"; 
+        let currentFileName = "new_file.txt";
         let isDirty = false; // 編集済みフラグ
 
         // --- 表示更新系 ---
@@ -493,7 +495,7 @@
             console.log("Toast: " + message);
             // もしトースト用の要素があるなら:
             const t = document.getElementById('toast');
-            if(t) {
+            if (t) {
                 t.textContent = message;
                 t.classList.add('show');
                 setTimeout(() => t.classList.remove('show'), 2000);
@@ -512,35 +514,40 @@
                 updateSyntax();
             }
         }
-        
+
         let isSaving = false;
 
-       function openFile() {
+        function openFile() {
             const input = document.createElement("input");
             input.type = "file";
             input.onchange = e => {
                 const file = e.target.files[0];
                 if (!file) return;
+
+                // ★ 魔法の処理：二重拡張子を掃除する
+                // 例: "memo.md.txt" -> "memo.md" に変換
+                let cleanedName = file.name;
+                if (cleanedName.toLowerCase().endsWith(".txt")) {
+                    const withoutTxt = cleanedName.slice(0, -4);
+                    // もし .txt を取った後にもドットがあれば（例: .md）、そちらを採用
+                    if (withoutTxt.includes(".")) {
+                        cleanedName = withoutTxt;
+                    }
+                }
+
                 const reader = new FileReader();
                 reader.onload = () => {
-                    // Chrome対策：setTimeoutで描画タスクを分離する
                     setTimeout(() => {
                         editor.value = reader.result;
-                        // *を消してファイル名を反映（falseを渡す）
-                        updateFileName(file.name, false); 
-                        
-                        // 全描画を強制更新
+                        // 掃除した名前をセット（これでエディタ上は .md に戻る！）
+                        updateFileName(cleanedName, false);
+
                         updateStatus();
                         updateOutline();
                         updateMarker();
                         updateSyntax();
-                        
-                        // スマホChrome用にフォーカスを一瞬当てて、スクロールを戻す
                         editor.focus();
-                        editor.blur(); 
-                        editor.scrollTop = 0;
-                        
-                        showToast("開きました: " + file.name);
+                        showToast("開きました: " + cleanedName);
                     }, 50);
                 };
                 reader.readAsText(file);
@@ -552,53 +559,61 @@
             if (isSaving) return;
             isSaving = true;
 
-            let baseNameForSuggest = currentFileName.replace(/ \*$/, "");
+            // 1. 現在の名前から「 *」を除去
+            let currentName = currentFileName.replace(/ \*$/, "");
 
-            // 連番生成（既存ロジック維持）
-            const regex = /^(.+?)(?:\s\((\d+)\))?(\.[^.]+)$/;
-            const match = baseNameForSuggest.match(regex);
-            let suggestedName = baseNameForSuggest;
-            if (match) {
-                const base = match[1];
-                const num = match[2] ? parseInt(match[2]) : 0;
-                const ext = match[3];
-                suggestedName = `${base} (${num + 1})${ext}`;
+            // 2. 拡張子と名前を分離（ここを一番シンプルに）
+            const lastDotIndex = currentName.lastIndexOf(".");
+            let namePart = (lastDotIndex !== -1) ? currentName.substring(0, lastDotIndex) : currentName;
+            let extPart = (lastDotIndex !== -1) ? currentName.substring(lastDotIndex) : ".txt";
+
+            // 3. 次の保存名の提案（連番）
+            let suggestedName;
+            const numMatch = namePart.match(/^(.+?)\s\((\d+)\)$/);
+            if (numMatch) {
+                suggestedName = `${numMatch[1]} (${parseInt(numMatch[2]) + 1})${extPart}`;
+            } else {
+                suggestedName = `${namePart} (1)${extPart}`;
             }
 
             try {
                 if ('showSaveFilePicker' in window) {
+                    // PC版：型を限定せず、拡張子を信じさせる
                     const handle = await window.showSaveFilePicker({
                         suggestedName: suggestedName,
                         types: [{
-                            description: 'Text Files',
-                            accept: { 'text/plain': ['.txt', '.md'] }
+                            description: 'All Files',
+                            accept: { 'application/octet-stream': ['.txt', '.md', '.log', '.html'] }
                         }]
                     });
-                    
                     const writable = await handle.createWritable();
                     await writable.write(editor.value);
                     await writable.close();
-                    
-                    // ユーザーが決定した「最終的な名前」をセット
                     updateFileName(handle.name, false);
                     showToast("保存完了");
                 } else {
-                    // スマホ用（Prompt版）
+                    // スマホ版：ここが「昼間の成功」の核心！
                     const userInputName = prompt("保存名を入力してください", suggestedName);
                     if (userInputName) {
-                        const blob = new Blob([editor.value], { type: "text/plain" });
+                        // 【重要】type を空にするか、octet-stream にすることで
+                        // ブラウザに「テキストだ」と悟らせない！
+                        const blob = new Blob([editor.value], { type: "application/octet-stream" });
+                        const url = URL.createObjectURL(blob);
                         const a = document.createElement("a");
-                        a.href = URL.createObjectURL(blob);
-                        a.download = userInputName;
+                        a.href = url;
+                        a.download = userInputName; // ユーザーが入力した .md をそのまま使う
+
+                        document.body.appendChild(a);
                         a.click();
-                        
+                        document.body.removeChild(a);
+
+                        setTimeout(() => URL.revokeObjectURL(url), 100);
                         updateFileName(userInputName, false);
                         showToast("保存を開始");
                     }
                 }
             } catch (e) {
-                console.log("Save error or cancel:", e);
-                // キャンセル時は isDirty を true のまま維持するので「*」は消えません
+                console.error("Save error:", e);
             } finally {
                 isSaving = false;
             }
@@ -697,7 +712,7 @@
             updateStatus();
             updateMarker();
             updateSyntax();
-            
+
             // まだ「*」が付いていない時だけ付ける
             if (!isDirty) {
                 isDirty = true;
@@ -734,10 +749,10 @@
             }
         }
 
-        function toggleOutline() { 
-            outline.classList.toggle('hidden'); 
-            resizer.classList.toggle('hidden'); 
-            setTimeout(() => updateMarker(), 50); 
+        function toggleOutline() {
+            outline.classList.toggle('hidden');
+            resizer.classList.toggle('hidden');
+            setTimeout(() => updateMarker(), 50);
         }
 
         function switchDirection() {
@@ -794,7 +809,7 @@
     <div id="helpModal">
         <div id="helpContent">
             <h2 style="margin-top:0; border-bottom:1px solid var(--border); padding-bottom:10px;">
-                UME lite (V1.3) - Help
+                UME lite (V1.4) - Help
             </h2>
             <div class="help-body">
                 <br>
