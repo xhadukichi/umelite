@@ -409,7 +409,7 @@
     <div id="menu">
         <button onclick="newFile()">New</button>
         <button onclick="openFile()">Open</button>
-        <button onclick="secureSaveFile()">Save</button>
+        <button onclick="saveFile()">Save</button>
         <span style="opacity:0.3">|</span>
         <button onclick="adjustFont(2)">F+</button>
         <button onclick="adjustFont(-2)">F-</button>
@@ -466,7 +466,6 @@
         let ticking = false;
         let currentFileName = "new_file.txt"; 
         let isDirty = false; // 編集済みフラグ
-        let isSaving = false; // 保存処理中かどうかを判定するフラグ
 
         // --- 表示更新系 ---
 
@@ -484,13 +483,10 @@
         }
 
         function updateFileName(name, dirty = false) {
-		    // 保存処理中(isSaving)なら、外部からの名前書き換えを一切無視する
-		    if (isSaving && dirty) return; 
-
-		    currentFileName = name;
-		    isDirty = dirty;
-		    renderFileName();
-		}
+            currentFileName = name;
+            isDirty = dirty;
+            renderFileName();
+        }
 
         function showToast(message) {
             // トースト未実装の場合はalertで代用するか、前回のCSS/HTMLを追加してください
@@ -537,60 +533,62 @@
             input.click();
         }
 
-		async function secureSaveFile() {
-		    if (window.showSaveFilePicker) {
-		       try {
-			        const handle = await window.showSaveFilePicker({
-			            suggestedName: currentFileName.replace(/ \*$/, ""),
-			            types: [{
-			                description: 'Text Files',
-			                accept: { 'text/plain': ['.txt', '.md'] }
-			            }]
-			        });
+        async function saveFile() {
+		    // 現在表示されている名前（アスタリスクなし）を取得
+		    let baseNameForSuggest = currentFileName.replace(/ \*$/, "");
 
-			        // ★ 2. 実際に書き込む
-			        const writable = await handle.createWritable();
-			        await writable.write(editor.value);
-			        await writable.close();
+		    // 連番生成
+		    const regex = /^(.+?)(?:\s\((\d+)\))?(\.[^.]+)$/;
+		    const match = baseNameForSuggest.match(regex);
+		    let suggestedName = baseNameForSuggest;
+		    if (match) {
+		        const base = match[1];
+		        const num = match[2] ? parseInt(match[2]) : 0;
+		        const ext = match[3];
+		        suggestedName = `${base} (${num + 1})${ext}`;
+		    }
 
-			        // ★ 3. 全てが成功した「後」で、初めて dirty を false にする
-			        currentFileName = handle.name;
-			        isDirty = false;
-			        renderFileName();
-			        
-			        showToast("保存完了: " + handle.name);
+		    if ('showSaveFilePicker' in window) {
+		        try {
+		            const handle = await window.showSaveFilePicker({
+		                suggestedName: suggestedName,
+		                types: [{
+		                    description: 'Text Files',
+		                    accept: { 'text/plain': ['.txt', '.md'] }
+		                }]
+		            });
+		            
+		            // 保存実行
+		            const writable = await handle.createWritable();
+		            await writable.write(editor.value);
+		            await writable.close();
+		            
+		            // 【重要】ここで handle.name を直接使う
+		            const finalSavedName = handle.name;
+		            
+		            // デバッグ：これでユーザーが打ち直した名前が出るか確認
+		            // alert("システムが認識した名前: " + finalSavedName);
+		            
+		            updateFileName(finalSavedName, false);
+		            showToast("保存完了");
 
-			    } catch (e) {
-			        console.log("User cancelled or error:", e.name);
-			        // キャンセル時は isDirty を true のまま維持する
-			    } finally {
-			        // ★ 4. 最後にガードを解く
-			        isSaving = false;
-			    }
+		        } catch (e) { console.log("Save error:", e); }
 		    } else {
 		        // スマホ用
-		        const finalName = currentFileName.replace(/ \*$/, ""); 
+		        const userInputName = prompt("保存名を入力してください", suggestedName);
+		        if (!userInputName) return;
+
 		        const blob = new Blob([editor.value], { type: "text/plain" });
 		        const a = document.createElement("a");
 		        a.href = URL.createObjectURL(blob);
-		        a.download = finalName;
+		        a.download = userInputName;
 		        a.click();
-		        updateFileName(finalName, false);
+		        
+		        // ユーザーが入力したそのもの（userInputName）を反映
+		        updateFileName(userInputName, false);
+		        showToast("保存を開始");
 		    }
 		}
-
-		// --- ショートカットキーの修正 ---
-		window.addEventListener('keydown', e => {
-		    // ここを secureSaveFile に変更
-		    if ((e.ctrlKey || e.metaKey) && e.key === 's') { 
-		        e.preventDefault(); 
-		        secureSaveFile(); 
-		    }
-		    if ((e.ctrlKey || e.metaKey) && e.key === 'o') { 
-		        e.preventDefault(); 
-		        openFile(); 
-		    }
-		});
 
         // --- エディタ・表示ロジック ---
 
@@ -678,17 +676,13 @@
         // --- イベントリスナー ---
 
         editor.addEventListener('input', () => {
-		    // 保存操作が始まったら、inputによる「*」付けを完全に停止させる
-		    if (isSaving) return; 
-
-		    updateStatus();
-		    updateMarker();
-		    updateSyntax();
-
-		    if (!isDirty) {
-		        updateFileName(currentFileName, true); 
-		    }
-		});
+            updateStatus();
+            updateMarker();
+            updateSyntax();
+            if (!isDirty) {
+                updateFileName(currentFileName, true); // 編集されたら*を付ける
+            }
+        });
 
         editor.addEventListener('click', () => { updateStatus(); updateMarker(); });
         editor.addEventListener('keyup', (e) => {
@@ -763,7 +757,11 @@
         document.addEventListener('touchmove', handleResize, { passive: false });
         document.addEventListener('touchend', () => { isResizing = false; document.body.classList.remove('resizing'); });
 
-
+        // ショートカット
+        window.addEventListener('keydown', e => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveFile(); }
+            if ((e.ctrlKey || e.metaKey) && e.key === 'o') { e.preventDefault(); openFile(); }
+        });
 
         // 起動時初期化
         document.getElementById('topFileName').onclick = () => showToast(currentFileName + (isDirty ? " (未保存)" : ""));
